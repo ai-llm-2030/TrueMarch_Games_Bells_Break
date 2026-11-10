@@ -1,0 +1,1446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bells Break — surf the Victorian coast</title>
+<!--
+  Bells Break — Australia.
+  One core action: ride the wave. Inputs: steer (up / down) · Space (paddle in, pump, snap, cutback).
+  Signature: the barrel — inside the tube the screen goes blue-green and quiet, the spit blows you out.
+  Twist: read the set — the horizon lines show each set's size; picking the right wave is half the score.
+  The pure core (waves, ride physics, the five-judge panel) sits between CORE-BEGIN and CORE-END and runs in Node.
+-->
+<style>
+  :root { --sea: #0f7c8c; --sea2: #0a4f5a; --sand: #f2d49b; --coral: #ff7a59; --ink: #fff8ec; --dim: #bfe3e2; --panel: rgba(7, 46, 54, .9); --line: rgba(242, 212, 155, .28); }
+  html, body { margin: 0; height: 100%; background: #062f37; color: var(--ink); font: 15px/1.4 "Trebuchet MS", "Segoe UI", "DejaVu Sans", sans-serif; overflow: hidden; -webkit-user-select: none; user-select: none; touch-action: none; }
+  #world { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .scene { position: fixed; inset: 0; display: none; place-items: center; z-index: 3; }
+  .scene.on { display: grid; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px 24px; width: min(560px, calc(100vw - 28px)); max-height: calc(100vh - 28px); overflow: auto; box-shadow: 0 18px 50px rgba(0,0,0,.45); box-sizing: border-box; }
+  h1 { margin: 0; font: 900 46px/1 "Arial Black", "Trebuchet MS", sans-serif; letter-spacing: .04em; color: var(--sand); text-shadow: 0 3px 0 #b5552f, 0 8px 22px rgba(0,0,0,.45); }
+  h2 { margin: 0 0 10px; font: 800 22px/1.15 "Arial Black", "Trebuchet MS", sans-serif; color: var(--sand); letter-spacing: .02em; }
+  .sub { color: var(--dim); margin: 6px 0 12px; }
+  #sc-title { place-items: center start; }
+  #sc-title .panel { margin-left: max(18px, 5vw); background: rgba(7, 46, 54, .72); width: min(470px, calc(100vw - 28px)); }
+  .greet { display: flex; gap: 12px; align-items: center; margin: 4px 0 14px; color: var(--dim); min-height: 52px; }
+  .greet b { color: var(--ink); }
+  .greet canvas { border-radius: 50%; background: #f2d49b; border: 2px solid var(--coral); flex: none; }
+  button { font: inherit; color: var(--ink); cursor: pointer; }
+  .play { display: block; width: 100%; text-align: left; background: linear-gradient(180deg, #ff8c6b, #e9603f); border: 0; border-radius: 12px; padding: 14px 18px; min-height: 64px; font: 900 22px/1.1 "Arial Black", "Trebuchet MS", sans-serif; color: #fff; box-shadow: 0 4px 0 #a8432a; }
+  .play small { display: block; font: 600 13px "Trebuchet MS", sans-serif; opacity: .92; margin-top: 4px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 10px; }
+  .btn { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; min-height: 44px; }
+  .btn.hot { background: var(--coral); border-color: var(--coral); color: #fff; font-weight: 800; }
+  .btn:hover { background: rgba(255,255,255,.13); }
+  .btn.hot:hover { background: #ff9274; }
+  button:focus-visible { outline: 3px solid var(--sand); outline-offset: 2px; }
+  .back { position: fixed; top: 12px; left: 12px; z-index: 6; display: none; background: rgba(7,46,54,.85); border: 1px solid var(--line); border-radius: 10px; min-width: 44px; min-height: 44px; padding: 8px 12px; font-weight: 700; }
+  .back.on { display: block; }
+  kbd { display: inline-block; min-width: 1.5em; padding: 1px 6px; border: 1px solid rgba(242,212,155,.5); border-bottom-width: 3px; border-radius: 5px; font: 700 12px ui-monospace, Menlo, monospace; text-align: center; background: rgba(0,0,0,.25); color: var(--sand); }
+  .controls { position: fixed; left: 16px; bottom: 14px; z-index: 4; background: rgba(7,46,54,.8); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 13px; color: var(--dim); display: grid; gap: 5px; }
+  .hud { position: fixed; left: 12px; top: 10px; right: 140px; z-index: 4; display: none; gap: 10px; align-items: flex-start; flex-wrap: wrap; pointer-events: none; }
+  .hud.on { display: flex; }
+  .chip { background: rgba(4,34,40,.78); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-weight: 700; text-shadow: 0 1px 2px #000; }
+  .chip small { display: block; font-weight: 500; color: var(--dim); font-size: 11px; }
+  .chip .big { font: 900 20px "Arial Black", sans-serif; color: var(--sand); }
+  .voice { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; background: rgba(4,34,40,.86); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; max-width: min(640px, calc(100vw - 40px)); display: none; font-size: 15px; }
+  .voice.on { display: block; }
+  .voice b { color: var(--coral); }
+  .tip { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 5; background: #fff8ec; color: #0a4f5a; border-radius: 12px; padding: 10px 14px; display: none; max-width: min(460px, calc(100vw - 40px)); box-shadow: 0 10px 30px rgba(0,0,0,.35); font-weight: 600; }
+  .tip.on { display: flex; gap: 10px; align-items: center; }
+  .tip button { background: #0f7c8c; color: #fff; border: 0; border-radius: 8px; min-height: 36px; padding: 4px 10px; flex: none; }
+  .tip kbd { color: #0a4f5a; border-color: #0a4f5a; background: #f2d49b; }
+  .mgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .mcard { text-align: left; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 10px; padding: 8px; min-height: 92px; font-size: 12px; display: flex; flex-direction: column; gap: 3px; }
+  .mcard b { font-size: 13px; color: var(--sand); }
+  .mcard .st { margin-top: auto; font-weight: 700; color: var(--dim); }
+  .mcard.done .st { color: #8fe3a5; }
+  .mcard.lock { opacity: .45; cursor: not-allowed; }
+  .mcard.final { border-color: var(--coral); }
+  .act { margin: 12px 0 6px; font-weight: 800; color: var(--coral); letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  #sc-missions .panel { width: min(900px, calc(100vw - 24px)); }
+  @media (max-width: 640px) { .mgrid { grid-template-columns: repeat(3, 1fr); } h1 { font-size: 34px; } }
+  .wide { width: min(1100px, 90vw) !important; height: min(560px, calc(100vh - 28px)); display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  @media (max-width: 760px), (max-height: 460px) { .wide { grid-template-columns: 1fr; height: auto; } }
+  .waves { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .waves span { background: rgba(255,255,255,.08); border-radius: 8px; padding: 4px 8px; font-weight: 700; }
+  .waves span.best { background: var(--coral); color: #fff; }
+  .judges { display: flex; gap: 6px; margin: 6px 0; }
+  .judges span { background: #fff8ec; color: #0a4f5a; border-radius: 6px; padding: 3px 7px; font: 800 14px ui-monospace, monospace; }
+  .judges span.drop { opacity: .4; text-decoration: line-through; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .touch { display: none; }
+  body.is-touch .touch.on { display: block; }
+  #pumpBtn { position: fixed; right: 18px; bottom: 22px; z-index: 4; width: 96px; height: 96px; border-radius: 50%; border: 3px solid #fff8ec; background: rgba(255,122,89,.85); font: 900 15px "Arial Black", sans-serif; color: #fff; }
+  #steerPad { position: fixed; left: 14px; bottom: 22px; z-index: 4; width: 70px; height: 190px; border-radius: 35px; border: 2px dashed rgba(255,248,236,.6); background: rgba(4,34,40,.4); color: var(--dim); font-size: 12px; text-align: center; }
+  .toast { position: fixed; left: 50%; top: 70px; transform: translateX(-50%); z-index: 7; background: rgba(4,34,40,.94); border: 1px solid var(--sand); border-radius: 10px; padding: 8px 14px; display: none; max-width: min(520px, calc(100vw - 40px)); }
+  .toast.on { display: block; }
+  .set label { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .prow { display: flex; gap: 8px; align-items: stretch; }
+  .prow .play { flex: 1; }
+  .rank { flex: none; width: 92px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid var(--line); display: grid; place-content: center; text-align: center; padding: 4px; font-size: 11px; color: var(--dim); }
+  .rank b { display: block; color: var(--sand); font: 900 13px/1.15 "Arial Black", sans-serif; }
+  .rank .s { color: #ffd34d; font-weight: 800; font-size: 13px; }
+  .mcard .stars { color: #ffd34d; letter-spacing: 1px; font-size: 13px; }
+  .mcard .new { color: #ffb38a; font-size: 11px; }
+  .drills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .rstars { font: 900 26px Arial, sans-serif; color: #ffd34d; letter-spacing: 2px; }
+  .goal { font-size: 13px; color: var(--dim); }
+  .goal.ok { color: #8fe3a5; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="world" aria-hidden="true"></canvas>
+<button class="back" id="back" aria-label="Back (Esc)">&#8592; Back <kbd>Esc</kbd></button>
+
+<div class="hud" id="hud">
+  <div class="chip"><small id="hClockL">Heat</small><span class="big" id="hClock">1:20</span></div>
+  <div class="chip"><small>Best two</small><span class="big" id="hTotal">0.00</span> <span id="hTarget"></span></div>
+  <div class="chip" id="hPrio" style="display:none"><small id="hPrioL">Priority</small><span class="big" id="hPrioV">YOU</span></div>
+  <div class="chip" id="hWavesChip"><small>Waves</small><span id="hWaves">—</span></div>
+</div>
+<div class="voice" id="voice"></div>
+<div class="tip" id="tip"><span id="tipText"></span><button id="tipOk">Got it</button></div>
+<div class="toast" id="toast"></div>
+<button class="touch" id="pumpBtn" aria-label="Paddle / pump (Space)">PUMP</button>
+<div class="touch" id="steerPad" aria-hidden="true"><br>&#9650;<br><br>drag<br>to<br>steer<br><br>&#9660;</div>
+
+<section class="scene" id="sc-title" aria-labelledby="ttl">
+  <div class="panel">
+    <h1 id="ttl">BELLS BREAK</h1>
+    <div class="sub">Dawn on the Surf Coast, Victoria. Read the set, drop in, get barrelled.</div>
+    <div class="greet" id="greet"></div>
+    <div id="menu"></div>
+  </div>
+</section>
+<div class="controls" id="controlsCard">
+  <div><kbd>&#8593;</kbd><kbd>&#8595;</kbd> or mouse: steer up and down the face</div>
+  <div><kbd>Space</kbd> / click: paddle in · pump · snap · cutback · floater · stomp an air</div>
+  <div><kbd>Esc</kbd> back · <kbd>P</kbd> pause · <kbd>M</kbd> mute</div>
+</div>
+
+<section class="scene" id="sc-missions" role="dialog" aria-modal="true" aria-labelledby="mttl">
+  <div class="panel"><h2 id="mttl">The Heats</h2><div class="sub">Each heat: your best two waves against a rival's. ★ win · ★★ win by the margin · ★★★ that plus the named move, clean (no wipeouts, no interference). Stars make your rank.</div><div id="mlist"></div>
+    <div class="bar"><button class="btn" id="mDaily">Daily swell</button><button class="btn" id="mShallows">The Shallows (practice)</button><button class="btn" id="mTop" hidden>Big Wave Day</button></div>
+    <div class="drills" id="mDrills"></div></div>
+</section>
+<section class="scene" id="sc-how" role="dialog" aria-modal="true" aria-labelledby="httl">
+  <div class="panel"><h2 id="httl">How to surf a heat</h2>
+    <p><b>1 · Read the set.</b> Lines on the horizon are the waves coming. Thicker lines are bigger waves. Bigger waves score more, so let a small one go by.</p>
+    <p><b>2 · Paddle in.</b> When a wave reaches you, the ring around you turns green. Press <kbd>Space</kbd> (or tap PUMP) then.</p>
+    <p><b>3 · Ride.</b> <kbd>&#8593;</kbd><kbd>&#8595;</kbd> or the mouse steer you up and down the face. Going down gives you speed, climbing slows you. <kbd>Space</kbd> pumps in the middle of the face, <b>snaps</b> at the top (when you are fast), and <b>cuts back</b> to the curl when you are far ahead of it.</p>
+    <p><b>4 · The barrel.</b> When Shazza calls "it's throwing!", the lip pitches over by the curl. Slow down (climb a little), sit low-to-middle right beside the curl, and you are inside. Stay high and the lip lands on you.</p>
+    <p><b>5 · The judges.</b> Five judges score each wave out of 10. The highest and lowest are dropped. Speed, power (snaps, cutbacks, bottom turns), flow, variety and barrels count. Your heat is your best two waves.</p>
+    <p><b>6 · The moves.</b> <b>Floater</b> (from heat 2): <kbd>Space</kbd> at the top right by the curl rides you over the breaking lip; steer down to land. <b>Aerial</b> (from heat 7): a fast bottom turn (the speed bar gold) straight up into the lip launches you; tap <kbd>Space</kbd> as you come down to stomp it. <b>Deep barrel</b> (from heat 11): sit right by the curl inside the tube. Moves inside 2.4 s of each other make a <b>combo</b> the judges love.</p>
+    <p><b>7 · A real heat</b> (from heat 6). Rivals sit in the lineup with you. The <b>priority</b> disc says who goes first: whoever has it takes any wave they want; catch a wave a rival with priority is riding and it is <b>interference</b> (your second-best wave is halved). Catching a wave sends you to the back. From heat 8 the rivals read your habits. From heat 11 some waves <b>close out</b>: float over the section or stay high and kick out.</p>
+    <p><b>Stars.</b> ★ win the heat · ★★ win by the margin on the card · ★★★ that plus the named move, no wipeouts. Stars make your rank: Grommet → Clubbie → Charger → Bells Legend.</p>
+    <p>A <b>wipeout</b> ends the wave. A wipeout means the heat is not flawless.</p>
+  </div>
+</section>
+<section class="scene" id="sc-settings" role="dialog" aria-modal="true" aria-labelledby="sttl">
+  <div class="panel set"><h2 id="sttl">Settings</h2>
+    <label>Sound <button class="btn" id="sSound"></button></label>
+    <label>Motion (slow-motion, spray, swell) <button class="btn" id="sMotion"></button></label>
+    <label>Tips from Shazza <button class="btn" id="sTips">Show them again</button></label>
+  </div>
+</section>
+<section class="scene" id="sc-pause" role="dialog" aria-modal="true" aria-labelledby="pttl">
+  <div class="panel" style="width:min(24em,calc(100vw - 28px))"><h2 id="pttl">Sitting on the board</h2><div class="sub" id="pSub"></div>
+    <div style="display:grid;gap:8px"><button class="btn hot" id="pResume">Back in the water</button><button class="btn" id="pQuit">Leave the heat</button></div></div>
+</section>
+<section class="scene" id="sc-results" role="dialog" aria-modal="true" aria-labelledby="rttl">
+  <div class="panel wide">
+    <div style="overflow:auto"><h2 id="rttl">The Scoreboard</h2><div id="rCalm" class="sub"></div><div id="rStars"></div></div>
+    <div style="overflow:auto"><h2 id="rHead">Your heat</h2><div id="mine"></div>
+      <div class="bar" id="rBar"></div></div>
+  </div>
+</section>
+<div class="sr" aria-live="polite" id="live"></div>
+
+<script>
+/*CORE-BEGIN*/
+var SURF = (function () {
+  'use strict';
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function hash(s) { s = String(s); var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+  // Acts: each adds one thing. 1 = a beach break, 2 = the point (long walls, more barrels, faster peel), 3 = the reef (big, fast, a heavy lip).
+  var ACTS = [null,
+    { name: 'Dawn Patrol', place: 'Torquay front beach', sz: [0.7, 1.15], len: [8, 10], peel: 0.86, pitch: 0.7, lip: 0.28, sky: 0 },
+    { name: 'The Point', place: 'Bells Bowl, Victoria', sz: [0.9, 1.4], len: [9, 12], peel: 0.92, pitch: 1.0, lip: 0.3, sky: 1 },
+    { name: 'The Reef', place: 'Outer reef, Margaret River', sz: [1.2, 1.9], len: [9, 12], peel: 0.99, pitch: 1.25, lip: 0.36, sky: 2 }];
+  // name, the heat's length (game seconds), the rival's best-two total to beat
+  var MS = [null,
+    ['First Light', 75, 5.0], ['Morning Glass', 80, 7.0], ['Onshore Chop', 85, 8.0], ['The Club Tower', 85, 9.0], ['Final · Club Champs', 90, 10.0],
+    ['Winter Swell', 90, 10.5], ['Long Walls', 90, 11.0], ['The Bowl Section', 95, 11.5], ['Cold Offshore', 95, 12.0], ['Final · Easter at the Bowl', 100, 12.8],
+    ['Outer Reef', 100, 13.0], ['Heavy Water', 100, 13.5], ['The Bombie', 105, 14.0], ['Sunset Sets', 105, 14.5], ['Final · The Big Day', 110, 15.0]];
+  // Advanced: who is in the water (act 2 on), what is new, and the star goals.
+  // rv: rival surfers (who = 1 Mick, 2 Jaz; style hustler | tactician; adapt = reads your habits); first = who starts with priority;
+  // close = closeouts (act 3); late = seconds before the hooter when a trailing rival takes anything.
+  var MICK = function (o) { return Object.assign({ who: 1, style: 'hustler', form: 1, adapt: false }, o || {}); };
+  var JAZ = function (o) { return Object.assign({ who: 2, style: 'tactician', form: 1, adapt: true }, o || {}); };
+  var MX = [null, {}, {}, {}, {}, {},
+    { rv: [MICK()], first: 'you', news: 'A real heat: Mick is in the water and priority decides who goes.' },
+    { rv: [MICK()], first: 'you', news: 'Aerials: hit the lip at full speed to launch, tap to stomp.' },
+    { rv: [MICK({ adapt: true })], first: 'r1', news: 'Mick reads your habits and takes your favourite wave.' },
+    { rv: [MICK({ style: 'tactician', adapt: true })], first: 'r1', news: 'Cold offshore: Mick sits on priority for the set\'s best wave.' },
+    { rv: [MICK({ adapt: true, form: 1.04 })], first: 'r1', news: 'Final: Mick at his best, reading you all heat.' },
+    { rv: [JAZ()], first: 'r1', close: 0.4, news: 'Closeouts: float over the section or kick out high. Jaz paddles out.' },
+    { rv: [JAZ()], first: 'r1', close: 0.45, news: 'Deep barrels: sit right by the curl for the big numbers.' },
+    { rv: [JAZ(), MICK({ adapt: true, form: 0.95 })], first: 'r1', close: 0.45, news: 'Three in the water: Jaz and Mick both hunt priority.' },
+    { rv: [JAZ(), MICK({ adapt: true, form: 0.97 })], first: 'r1', close: 0.5, late: 30, news: 'Sunset: trailing rivals take anything in the last 30 s.' },
+    { rv: [JAZ({ form: 1.03 }), MICK({ adapt: true, form: 1.0 })], first: 'r1', close: 0.5, late: 25, news: 'Final: both at full form, closeouts all heat.' }];
+  // ★★ = win by m · ★★★ = ★★ plus k of the named technique, no wipeouts, no interference
+  var GOALS = [null, [2.0, 'barrel', 1], [2.0, 'floater', 1], [2.0, 'combo', 3], [2.0, 'floater', 2], [2.5, 'eight', 1],
+    [1.5, 'barrel', 1], [1.5, 'air', 1], [1.5, 'combo', 4], [1.5, 'air', 2], [2.0, 'eight', 1],
+    [1.0, 'closeFloat', 1], [1.0, 'deep', 1], [1.0, 'air', 2], [1.0, 'combo', 4], [1.5, 'eight', 1], [1.0, 'deep', 2]];
+  var TECH_NAME = { barrel: 'barrel', floater: 'floater', combo: 'combo ×', air: 'aerial', eight: 'wave of 8+', closeFloat: 'floated closeout', deep: 'deep barrel' };
+  var RANKS = [[0, 'Grommet'], [15, 'Clubbie'], [30, 'Charger'], [45, 'Bells Legend']];
+  /** The techniques open at mission n (one per act): floater from heat 2, aerial from heat 7, the deep barrel + closeouts from heat 11. */
+  function techFor(n) { return { floater: n >= 2, air: n >= 7, deep: n >= 11 }; }
+  function mission(n) {
+    if (n === 16) return { n: 16, act: 3, name: 'Big Wave Day', heat: 110, target: 16.0, A: { name: 'Big Wave Day', place: 'Outer reef, Margaret River', sz: [1.6, 2.2], len: [10, 13], peel: 1.04, pitch: 1.4, lip: 0.4, sky: 2 }, final: true,
+      rv: [JAZ({ form: 1.06 }), MICK({ adapt: true, form: 1.03 })], first: 'r1', close: 0.5, late: 30, news: 'Big Wave Day: the heaviest reef, both rivals at their best.', goal: GOALS[16] };
+    var m = MS[n]; if (!m) return null;
+    var act = n <= 5 ? 1 : n <= 10 ? 2 : 3, x = MX[n];
+    return { n: n, act: act, name: m[0], heat: m[1], target: m[2], A: ACTS[act], final: n % 5 === 0, rv: x.rv || [], first: x.first || 'you', close: x.close || 0, late: x.late || 15, news: x.news || '', goal: GOALS[n] };
+  }
+
+  /** The sets of one heat: every wave's arrival time, size, length and its barrel (pitch) sections. Seeded. */
+  function genSets(seed, M, teach) {
+    var R = rng(seed), A = M.A, out = [], t = 5, set = 0, len0 = A.len[0], len1 = A.len[1];
+    while (t < M.heat + 30) {
+      var nw = 2 + (R() < 0.5 ? 1 : 0), setBig = R();
+      for (var i = 0; i < nw; i++) {
+        var sz = A.sz[0] + (A.sz[1] - A.sz[0]) * clamp(setBig * 0.6 + R() * 0.55 - (i === 0 ? 0.15 : 0), 0, 1);
+        var q = (sz - A.sz[0]) / (A.sz[1] - A.sz[0] || 1);
+        var len = len0 + (len1 - len0) * q + R() * 1.2;
+        var np = Math.max(q > 0.25 ? 1 : 0, Math.floor(A.pitch * (0.4 + q) + R() * 0.8)), ps = [], last = 1.6;
+        for (var k = 0; k < np && last < len - 3.5; k++) { var pt = last + 0.6 + R() * 2.2; if (pt > len - 3) break; var du = 1.8 + R() * 1.0 + q * 0.4; ps.push({ t: +pt.toFixed(2), dur: +du.toFixed(2) }); last = pt + du + 0.8; }
+        out.push({ id: out.length, set: set, at: +(t + i * 4.6).toFixed(2), sz: +sz.toFixed(3), len: +len.toFixed(2), pitches: ps, peel: A.peel * (0.97 + R() * 0.06) });
+      }
+      t += nw * 4.6 + 6 + R() * 4; set++;
+    }
+    if (M.close) {   // act 3: closeouts — the end section of some waves shuts down all at once (its own stream, so acts 1–2 keep their sets)
+      var RC = rng((seed ^ 0xC105E) >>> 0);
+      out.forEach(function (w) { if (RC() < M.close) w.close = { t: +(w.len - 2.2 - RC() * 1.2).toFixed(2) }; });
+    }
+    if (teach && out.length) {   // mission 1's first wave: the teaching wave, built for the first barrel (the wow)
+      var w = out[0]; w.sz = A.sz[1]; w.len = 10; w.pitches = [{ t: 3.4, dur: 3.0 }]; w.peel = A.peel; w.teach = true;
+    }
+    return out;
+  }
+  /** How good a wave could be, for the Swell Report (and the bot). */
+  function potential(w) { return w.sz * 3 + w.len * 0.15 + w.pitches.length * 1.4; }
+
+  function makeRide(w, o) {
+    o = o || {};
+    var tech = o.tech || { floater: false, air: false, deep: false };
+    return { t: 0, len: w.len, sz: w.sz, peel: w.peel, pitches: w.pitches, y: 0.92, vy: -1.6, spd: 1.0, d: 0.32, cd: 0, cutT: 0, low: false,
+      wax: !!o.wax, lip: o.lip || 0.3, teach: !!w.teach || !!o.teach, tube: 0, tubeTotal: 0, made: 0, inTube: false, spdSum: 0, n: 0,
+      man: { snap: 0, cut: 0, bottom: 0, pump: 0, floater: 0, floaterS: 0, air: 0, airS: 0, closeFloat: 0 }, stalls: 0, wipes: 0, end: null, cause: null, warned: {}, drop: 0.55, maxTube: 0,
+      tech: tech, close: w.close ? { t: w.close.t } : null, closeDone: false, floatT: 0, airT: 0, airMax: 0.8, airTap: null,
+      combo: 0, maxCombo: 0, lastMan: -9, deep: 0, deepTotal: 0, deepMade: 0, btT: -9, btS: 0 };
+  }
+  function pitchAt(r) {
+    for (var i = 0; i < r.pitches.length; i++) { var p = r.pitches[i]; if (r.t >= p.t - 1.3 && r.t < p.t + p.dur) return p; }
+    return null;
+  }
+  var AIRWIN = 0.22, FLOAT_T = 0.85, AIRSPD = 1.22;
+  /** An aerial needs a fast bottom turn (speed ≥ 1.22) driven straight up into the lip inside 1.4 s. */
+  function airReady(r) { return r.btS >= AIRSPD && r.t - r.btT <= 1.4; }
+  /** A manoeuvre inside 2.4 s of the last one extends the combo (the judges' flow). */
+  function chain(r, ev) {
+    r.combo = r.t - r.lastMan <= 2.4 ? r.combo + 1 : 1; r.lastMan = r.t; r.maxCombo = Math.max(r.maxCombo, r.combo);
+    if (r.combo >= 2) ev.push({ k: 'combo', n: r.combo });
+  }
+  /** Is a closeout section about to shut (the warning window)? */
+  function closing(r) { return !!(r.close && !r.closeDone && r.t >= r.close.t - 1.4); }
+  /** One step of the ride. inp = {u: -1..1 (up is +), act: a fresh press}. Returns events. */
+  function stepRide(r, inp, dt) {
+    var ev = [];
+    if (r.end) return ev;
+    r.t += dt; r.cd = Math.max(0, r.cd - dt);
+    var u = clamp(inp.u || 0, -1, 1), act = !!inp.act;
+    if (r.drop > 0) { r.drop -= dt; u = -1; act = false; if (r.drop <= 0) ev.push({ k: 'popped' }); }
+    var P = pitchAt(r), pitching = !!(P && r.t >= P.t), warn = !!(P && !pitching);
+    if (P && !r.warned[P.t]) { r.warned[P.t] = 1; ev.push({ k: 'warn' }); }
+    if (r.close && !r.warned.c && r.t >= r.close.t - 1.4) { r.warned.c = 1; ev.push({ k: 'closeWarn' }); }
+    var flying = r.airT > 0, floating = r.floatT > 0;
+    if (flying) {   // an aerial: no steering in the air; the first Space press is the stomp, and it must come in the landing window
+      if (act && r.airTap === null) r.airTap = r.airT;
+      act = false; r.airT -= dt;
+      r.y = 1 + 0.3 * Math.sin(Math.PI * clamp(1 - r.airT / r.airMax, 0, 1)); r.vy = 0;
+      if (r.airT <= 0) {
+        var tap = r.airTap, ms = tap === null ? null : Math.round((tap - AIRWIN / 2) * 1000);   // + = early, − = late
+        r.airT = 0; r.airTap = null; r.y = 0.95; r.vy = -1.3;
+        if (tap !== null && tap <= AIRWIN) { r.man.air++; ev.push({ k: 'air', ms: ms }); chain(r, ev); }
+        else { r.man.airS++; r.spd -= 0.35; r.combo = 0; ev.push({ k: 'airSketch', ms: ms }); }
+      }
+    } else if (floating) {   // a floater: riding along the top of the breaking lip; land steering down
+      act = false; r.floatT -= dt; r.y = 1; r.vy = 0; r.spd -= 0.1 * dt; r.d += 0.2 * dt;
+      if (r.floatT <= 0) {
+        r.floatT = 0; r.y = 0.9; r.vy = -1.4;
+        if (u <= 0.2) { r.man.floater++; ev.push({ k: 'floater' }); chain(r, ev); }
+        else { r.man.floaterS++; r.spd -= 0.25; r.combo = 0; ev.push({ k: 'floaterSketch' }); }
+      }
+    } else {
+      var turn = r.wax ? 2.3 : 1.7;
+      r.vy += (u * turn - r.vy) * Math.min(1, dt * (r.wax ? 8 : 5.5));
+      r.y += r.vy * dt * 0.9;
+      if (r.teach && P && Math.abs(r.d - 0.07) < 1.0) r.d += (0.07 - r.d) * Math.min(1, dt * 1.6);   // mission 1's first wave pulls you into the pocket
+      var trim = r.peel * (0.8 + 0.42 * r.y);   // a high line is fast, a low line slow: sit low and the curl catches you up
+      r.spd += (-r.vy * 0.5 + (trim - r.spd) * 0.6 - (r.d > 1.15 ? (r.d - 1.15) * 0.9 : 0)) * dt;
+    }
+    if (act && r.cd === 0 && r.drop <= 0) {
+      if (r.tech.floater && r.y > 0.74 && !r.inTube && (closing(r) || r.d < 0.42)) { r.floatT = FLOAT_T; r.cd = 0.4; ev.push({ k: 'floatUp' }); }   // up onto the lip
+      else if (P && r.d > 0.16 && r.d <= 0.72) { r.spd -= 0.3; r.cd = 0.3; ev.push({ k: 'brake' }); }   // the lip is throwing: drag a hand, stall, let the barrel come to you
+      else if (r.y > 0.78 && r.spd > 0.95) { r.vy = -1.5; r.spd -= 0.08; r.man.snap++; r.cd = 0.5; ev.push({ k: 'snap' }); chain(r, ev); }
+      else if (r.d > 0.72 && r.y > 0.3 && r.spd > 0.85) { r.cutT = 0.6; r.spd -= 0.14; r.man.cut++; r.cd = 0.7; ev.push({ k: 'cut' }); chain(r, ev); }
+      else if (r.y > 0.18 && r.y < 0.82) { r.spd += r.wax ? 0.2 : 0.15; r.man.pump++; r.cd = 0.4; ev.push({ k: 'pump' }); }
+      else { r.cd = 0.2; ev.push({ k: 'nothing' }); }
+    }
+    if (r.cutT > 0) { r.cutT -= dt; r.d -= 0.62 * dt; }
+    r.spd = clamp(r.spd, 0.3, 1.6);
+    r.d += (r.spd - r.peel) * 0.5 * dt;
+    var up = r.airT > 0 || r.floatT > 0;
+    if (r.y < 0) { r.y = 0; if (r.vy < 0) r.vy = 0; r.low = true; }
+    if (r.low && r.y > 0.12) { if (r.vy > 0.5 && r.spd > 0.8) { r.man.bottom++; r.btT = r.t; r.btS = r.spd; ev.push({ k: 'bottom', fast: r.spd >= AIRSPD }); } r.low = false; }
+    if (!up && r.y > 1) {
+      if (r.tech.air && !pitching && airReady(r) && r.vy > 0.7 && r.d > r.lip + 0.04) { r.airT = r.airMax; r.airTap = null; r.y = 1; r.vy = 0; ev.push({ k: 'launch' }); up = true; }   // off the lip at full speed: an aerial
+      else {
+        if (r.d < r.lip) return wipe(r, ev, 'falls');
+        r.y = 1; if (r.vy > 0) r.vy = 0; r.spd -= 0.5 * dt;
+        if (!r.stallT) { r.stalls++; r.combo = 0; ev.push({ k: 'stall' }); } r.stallT = 0.8;
+      }
+    }
+    if (r.stallT) r.stallT = Math.max(0, r.stallT - dt);
+    // act 3: the closeout — float it, kick out high, or be buried
+    if (r.close && !r.closeDone && r.t >= r.close.t) {
+      r.closeDone = true;
+      if (up) { r.man.closeFloat++; ev.push({ k: 'closeFloat' }); chain(r, ev); r.len = Math.min(r.len, r.t + 1.4); }
+      else if (r.y > 0.72) { r.end = 'kick'; ev.push({ k: 'end', why: 'kickout' }); return ev; }
+      else return wipe(r, ev, 'closeout');
+    }
+    var band = r.teach ? [0.06, 0.78, 0.26] : [0.14, 0.64, 0.19], inTube = false;
+    if (pitching && !up) {
+      if (r.d < band[2] + 0.06 && r.y > band[1] + 0.08) return wipe(r, ev, 'lip');
+      inTube = r.d > -0.05 && r.d < band[2] && r.y >= band[0] && r.y <= band[1];
+      if (inTube) { r.tube += dt; if (r.d < 0.09) r.deep += dt; if (!r.inTube) ev.push({ k: 'tubeIn' }); }
+    }
+    if (r.inTube && !inTube) {   // out of the tube: the spit, if you rode it
+      if (r.tube >= 0.3) {
+        r.spd = Math.min(1.6, r.spd + 0.3); r.d += 0.1; r.tubeTotal += r.tube; r.made++; r.maxTube = Math.max(r.maxTube, r.tube);
+        var deep = r.deep >= 0.5; if (deep) { r.deepTotal += r.deep; r.deepMade++; }
+        ev.push({ k: 'spit', tube: r.tube, deep: deep ? r.deep : 0 }); chain(r, ev);
+      }
+      else ev.push({ k: 'tubeOut' });
+      r.tube = 0; r.deep = 0;
+    }
+    r.inTube = inTube;
+    if (r.d < (inTube ? -0.05 : -0.02)) return wipe(r, ev, pitching ? 'closed' : 'white');
+    r.spdSum += r.spd * dt; r.n += dt;
+    if (r.d > 1.7) { r.end = 'shoulder'; ev.push({ k: 'end', why: 'shoulder' }); }
+    else if (r.t >= r.len && !up) { r.end = 'kick'; ev.push({ k: 'end', why: 'kick' }); }
+    return ev;
+  }
+  function wipe(r, ev, cause) { r.end = 'wipe'; r.cause = cause; r.wipes++; r.combo = 0; r.floatT = 0; r.airT = 0; if (r.inTube && r.tube >= 0.3) { r.tubeTotal += r.tube * 0.5; } r.inTube = false; r.tube = 0; ev.push({ k: 'wipe', cause: cause }); return ev; }
+  /** A Leash: the wipeout keeps the wave — back on the board, behind the white water. */
+  function recover(r) { r.end = null; r.cause = null; r.d = 0.42; r.y = 0.3; r.vy = 0; r.spd = 0.85; r.cd = 0.5; r.cutT = 0; if (r.close && r.closeDone) r.len = Math.min(r.len, r.t + 1.5); }
+
+  /** The five judges: each scores 0–10, the highest and lowest are dropped, the middle three averaged. */
+  function judge(r, seed) {
+    var sp = clamp(((r.n ? r.spdSum / r.n : 0.8) - 0.75) / 0.55, 0, 1);
+    var m = r.man, power = Math.min(5, m.snap * 0.95 + m.cut * 1.25 + m.bottom * 0.3 + (m.floater || 0) * 1.0 + (m.floaterS || 0) * 0.35 + (m.air || 0) * 2.2 + (m.airS || 0) * 0.6 + (m.closeFloat || 0) * 1.2);
+    var kinds = (m.snap ? 1 : 0) + (m.cut ? 1 : 0) + (m.bottom ? 1 : 0) + (r.made ? 1 : 0) + (m.floater ? 1 : 0) + (m.air ? 1 : 0);
+    var flow = clamp(1 - r.stalls * 0.25 - r.wipes * 0.45, 0, 1) * Math.min(1, r.t / r.len);
+    var barrel = Math.min(4.2, r.tubeTotal * 0.9 + r.made * 0.7 + (r.deepTotal || 0) * 0.6);
+    var combo = Math.min(1.2, Math.max(0, (r.maxCombo || 0) - 1) * 0.3);
+    var raw = sp * 1.1 + power + flow * 1.1 + kinds * 0.4 + barrel + combo;
+    var f = 0.6 + 0.3 * r.sz;
+    if (r.end === 'wipe') raw *= 0.6;
+    var s = clamp(raw * f, 0, 10), R = rng(seed >>> 0), js = [];
+    for (var i = 0; i < 5; i++) js.push(+clamp(s + (R() - 0.5) * 0.9, 0, 10).toFixed(1));
+    var so = js.slice().sort(function (a, b) { return a - b; });
+    var score = Math.round((so[1] + so[2] + so[3]) / 3 * 100) / 100;
+    return { score: score, judges: js, lo: js.indexOf(so[0]), hi: js.lastIndexOf(so[4]), parts: { speed: sp, power: power, flow: flow, variety: kinds, barrel: barrel, combo: combo } };
+  }
+  function bestTwo(scores) { var s = scores.slice().sort(function (a, b) { return b - a; }); return Math.round(((s[0] || 0) + (s[1] || 0)) * 100) / 100; }
+
+  /** The bot: a skilled surfer, for measuring and testing. Returns {u, act}. o.lazy = the act-1 rider (no floaters, airs or closeout reads). */
+  var C = clamp;
+  function bot(r, skill, o) {
+    skill = skill || 1; var lazy = !!(o && o.lazy);
+    if (!lazy) {
+      if (r.airT > 0) return { u: 0, act: r.airT <= 0.13 };   // stomp in the landing window
+      if (r.floatT > 0) return { u: -1, act: false };          // land steering down
+      if (closing(r)) {                                         // closeout: climb, then float over it
+        var cu = C((0.86 - r.y) * 5, -1, 1);
+        return { u: cu, act: !!r.tech.floater && r.y > 0.76 && r.t >= r.close.t - 0.7 };
+      }
+    }
+    var P = pitchAt(r), u = 0, act = false;
+    if (P) { var ty = r.d > 0.13 ? 0.12 : r.d < 0.04 ? 0.55 : 0.38; u = C((ty - r.y) * 4, -1, 1); if (r.d > 0.16 || (r.spd < r.peel - 0.1 && r.d < 0.06 && r.y > 0.2 && r.y < 0.8)) act = true; }
+    else {
+      if (r.goUp === undefined) r.goUp = false;
+      if (r.y < 0.06) r.goUp = true;
+      if (r.y > 0.93) r.goUp = false;
+      u = r.goUp ? 1 : -1;
+      if (r.y > 0.82 && r.spd > 0.96 && r.d > r.lip + 0.05) act = true;
+      else if (r.d > 0.76 && r.y > 0.35 && r.spd > 0.9) act = true;
+      else if (r.y > 0.3 && r.y < 0.7 && r.spd < 1.05) act = true;
+      if (r.d < r.lip + 0.05 && r.y > 0.7) u = -1;
+      if (!lazy && r.tech.air && airReady(r) && r.d > r.lip + 0.06) { u = 1; act = false; r.goUp = true; }   // full speed: drive up through the lip for the air
+    }
+    if (skill < 1 && Math.random() > skill) act = false;
+    return { u: u, act: act };
+  }
+  /** Ride a wave with the bot (Node + the self-test). */
+  function simRide(w, o, dt) {
+    var r = makeRide(w, o); dt = dt || 1 / 60;
+    for (var i = 0; i < 2400 && !r.end; i++) { var b = bot(r, 1, o); stepRide(r, b, dt); }
+    return r;
+  }
+
+  // ══ The heat director (act 2 on): rivals in the water, priority, interference, habits read ══
+  function setInfo(ws, w) {
+    var best = null, first = null;
+    ws.forEach(function (x) { if (x.set !== w.set) return; if (!best || potential(x) > potential(best)) best = x; if (!first || x.at < first.at) first = x; });
+    return { first: first === w, best: best === w, set: w.set };
+  }
+  function heatInit(M, waves, seed) {
+    var rv = (M.rv || []).map(function (x, i) { return { id: 'r' + (i + 1), who: x.who, style: x.style, form: x.form || 1, adapt: !!x.adapt, busy: 0, scores: [], rides: 0, read: null }; });
+    var ids = rv.map(function (x) { return x.id; });
+    var order = M.first === 'you' || !ids.length ? ['you'].concat(ids) : [ids[0], 'you'].concat(ids.slice(1));
+    var ps = waves.filter(function (w) { return w.at < M.heat; }).map(potential).sort(function (a, b) { return a - b; });
+    return { on: rv.length > 0, M: M, seed: seed >>> 0, waves: waves, rivals: rv, order: order, interf: 0, picks: [], you: [], oi: 0, ci: 0, posts: [], mine: {}, cw: 0.9,
+             potMid: ps.length ? ps[Math.floor(ps.length * 0.5)] : 0 };
+  }
+  function rivalOf(H, id) { for (var i = 0; i < H.rivals.length; i++) if (H.rivals[i].id === id) return H.rivals[i]; return null; }
+  function toBack(H, id) { H.order = H.order.filter(function (x) { return x !== id; }).concat([id]); }
+  /** The player's habit, read from the last three waves taken: 'first' of the set, the set's 'best', or none. */
+  function habit(H) {
+    var p = H.picks.slice(-3); if (p.length < 2) return null;
+    var f = p.filter(function (x) { return x.first; }).length, b = p.filter(function (x) { return x.best && !x.first; }).length;
+    return f >= 2 ? 'first' : b >= 2 ? 'best' : null;
+  }
+  function heatScore(scores, interf) {
+    var s = scores.slice().sort(function (a, b) { return b - a; }), a0 = s[0] || 0, a1 = s[1] || 0;
+    if (interf >= 1) a1 /= 2; if (interf >= 2) a0 /= 2;   // the real rule: interference halves your second-best wave
+    return Math.round((a0 + a1) * 100) / 100;
+  }
+  function rivalBest(H) { var b = 0; H.rivals.forEach(function (r) { b = Math.max(b, bestTwo(r.scores)); }); return b; }
+  function rivalWants(H, R, w, t) {
+    if (w.gift) return false;
+    var info = setInfo(H.waves, w), M = H.M;
+    if (t > M.heat - (M.late || 15) && bestTwo(R.scores) <= heatScore(H.you, H.interf) + 0.5) return 'late';   // late and behind: anything
+    var hb = R.adapt ? habit(H) : null;
+    if (hb === 'first' && info.first) return 'habit';
+    if (hb === 'best' && info.best) return 'habit';
+    if (R.style === 'tactician') return info.best ? 'best' : false;
+    return info.best || potential(w) >= H.potMid ? 'want' : false;   // the hustler takes most decent waves
+  }
+  function rivalScore(H, R, w) {
+    var A = H.M.A, q = clamp((w.sz - A.sz[0]) / ((A.sz[1] - A.sz[0]) || 1), 0, 1), Rn = rng((H.seed ^ Math.imul(w.id + 1, 2654435761) ^ hash(R.id)) >>> 0);
+    var base = H.M.target / 2 * R.form * 0.93;
+    return Math.round(clamp(base * (0.82 + 0.3 * q + 0.05 * w.pitches.length) + (Rn() - 0.5) * 1.3, 0.5, 9.9) * 100) / 100;
+  }
+  function rivalGo(H, R, w, ev, why) {
+    w.claim = R.id; R.busy = w.at + w.len * 0.85 + 3.2; toBack(H, R.id); R.rides++;
+    H.posts.push({ at: w.at + w.len * 0.85, R: R, score: rivalScore(H, R, w), w: w });
+    ev.push({ k: 'claim', who: R.id, w: w, why: why });
+    if (why === 'habit' && !R.read) { R.read = habit(H); ev.push({ k: 'read', who: R.id, habit: R.read }); }
+  }
+  function openW(H, w, youFree, ev) {   // the catch window opens: whoever has priority decides first
+    if (w.at >= H.M.heat || w.claim || H.mine[w.id]) return;
+    for (var i = 0; i < H.order.length; i++) {
+      var id = H.order[i];
+      if (id === 'you') { if (youFree) return; continue; }
+      var R = rivalOf(H, id); if (R.busy > w.at) continue;
+      var want = rivalWants(H, R, w, w.at); if (want) { rivalGo(H, R, w, ev, want); return; }
+    }
+  }
+  function closeW(H, w, ev) {   // the window closes untaken: a rival behind you may still go
+    if (w.at >= H.M.heat || w.claim || H.mine[w.id]) return;
+    for (var i = 0; i < H.order.length; i++) {
+      var id = H.order[i]; if (id === 'you') continue;
+      var R = rivalOf(H, id); if (R.busy > w.at) continue;
+      var want = rivalWants(H, R, w, w.at); if (want) { rivalGo(H, R, w, ev, want); return; }
+    }
+  }
+  /** Advance the heat to time t. youFree = the player sits in the lineup, able to paddle. Returns events (claim · post · read). */
+  function heatTick(H, t, youFree) {
+    var ev = [], ws = H.waves, cw = H.cw;
+    if (!H.on) return ev;
+    while (H.oi < ws.length && ws[H.oi].at - cw / 2 <= t) { openW(H, ws[H.oi], youFree, ev); H.oi++; }
+    while (H.ci < ws.length && ws[H.ci].at + cw / 2 <= t) { closeW(H, ws[H.ci], ev); H.ci++; }
+    H.posts = H.posts.filter(function (p) { if (p.at > t) return true; p.R.scores.push(p.score); ev.push({ k: 'post', who: p.R.id, score: p.score, total: bestTwo(p.R.scores) }); return false; });
+    return ev;
+  }
+  /** The player catches w. Taking a wave a rival with priority is riding = interference. */
+  function youCatch(H, w) {
+    var info = setInfo(H.waves, w), bad = !!(w.claim && w.claim !== 'you'), who = bad ? w.claim : null;
+    H.mine[w.id] = 1; if (bad) H.interf++; else w.claim = 'you';
+    H.picks.push(info); toBack(H, 'you');
+    return { interference: bad, who: who };
+  }
+  /** Does the player hold priority over every rival free to paddle? */
+  function youFirst(H, t) {
+    for (var i = 0; i < H.order.length; i++) { var id = H.order[i]; if (id === 'you') return true; var R = rivalOf(H, id); if (R && R.busy <= t) return false; }
+    return true;
+  }
+
+  // ══ Stars and rank ══
+  /** res = {won, margin, tech: {barrel, floater, air, combo, eight, closeFloat, deep}, wipes, items, interf} → 0..3 */
+  function stars(n, res) {
+    if (!res || !res.won) return 0;
+    var g = (mission(n) || {}).goal || GOALS[1], s = 1;
+    if (res.margin >= g[0]) s = 2;
+    if (s === 2 && ((res.tech || {})[g[1]] | 0) >= g[2] && !res.wipes && !res.items && !res.interf) s = 3;
+    return s;
+  }
+  function goalText(n) {
+    var g = (mission(n) || {}).goal || GOALS[1], t = g[1] === 'combo' ? 'a combo ×' + g[2] : (g[2] > 1 ? g[2] + ' × ' : 'a ') + TECH_NAME[g[1]];
+    return { two: 'win by ' + g[0].toFixed(1), three: t + ', clean', clean: 'no wipeouts' + (n >= 6 ? ', no interference' : '') };
+  }
+  function rank(total) { var r = RANKS[0][1]; RANKS.forEach(function (x) { if (total >= x[0]) r = x[1]; }); return r; }
+  function rideTech(r) { return { barrel: r.made, floater: r.man.floater, air: r.man.air, combo: r.maxCombo, closeFloat: r.man.closeFloat, deep: r.deepMade }; }
+  function addTech(acc, t, score) {
+    acc.barrel += t.barrel; acc.floater += t.floater; acc.air += t.air; acc.closeFloat += t.closeFloat; acc.deep += t.deep;
+    acc.combo = Math.max(acc.combo, t.combo); if (score >= 8) acc.eight++; return acc;
+  }
+  function techZero() { return { barrel: 0, floater: 0, air: 0, combo: 0, eight: 0, closeFloat: 0, deep: 0 }; }
+
+  /** A whole heat in Node. pol 'skilled' respects priority, picks the best of each set and rides with every technique;
+   *  'naive' paddles for the first wave it can and rides like an act-1 surfer; 'polite' is naive but keeps off waves a rival has priority on. */
+  function simHeat(n, pol, seed) {
+    var M = mission(n), ws = genSets(seed, M, n === 1), H = heatInit(M, ws, seed), tech = techFor(n), lazy = pol !== 'skilled';
+    var you = [], free = 0, wipes = 0, acc = techZero();
+    for (var i = 0; i < ws.length; i++) {
+      var w = ws[i]; if (w.at >= M.heat) break;
+      var canGo = w.at >= free;
+      heatTick(H, w.at, canGo);
+      if (!canGo) continue;
+      var go;
+      if (pol === 'naive') go = true;
+      else if (pol === 'polite') go = !(w.claim && w.claim !== 'you');
+      else if (w.claim && w.claim !== 'you') go = false;
+      else {
+        var rest = ws.filter(function (x) { return x.set === w.set && x.at > w.at && !x.claim; });
+        var better = rest.some(function (x) { return potential(x) > potential(w) + 0.2; });
+        var mine = heatScore(you, H.interf), late = w.at > M.heat - 14;
+        go = !better || (late && you.length < 2) || (!youFirst(H, w.at) && potential(w) >= H.potMid * 0.95);
+        if (mine > Math.max(rivalBest(H), H.on ? 0 : M.target) + 3 && potential(w) < H.potMid) go = false;
+      }
+      if (!go) continue;
+      if (H.on) youCatch(H, w);
+      var r = simRide(w, { lip: M.A.lip, teach: !!w.teach, tech: lazy ? { floater: false, air: false, deep: false } : tech, lazy: lazy });
+      var sc = judge(r, (seed ^ (w.id * 7919)) >>> 0).score;
+      you.push(sc); H.you = you; addTech(acc, rideTech(r), sc); if (r.end === 'wipe') wipes++;
+      free = w.at + r.t + 3.2 + 0.5;
+    }
+    heatTick(H, M.heat + 60, false);
+    var tot = heatScore(you, H.interf), opp = H.on ? rivalBest(H) : M.target, won = tot > opp;
+    var res = { won: won, total: tot, opp: opp, margin: tot - opp, tech: acc, wipes: wipes, items: 0, interf: H.interf, waves: you.length };
+    res.stars = stars(n, res);
+    return res;
+  }
+  function selfTest() {
+    var fails = [], ok = function (c, m) { if (!c) fails.push(m); };
+    var M1 = mission(1), W1 = genSets(42, M1, true);
+    ok(W1.length > 6, 'mission 1 has sets');
+    ok(W1[0].teach && W1[0].pitches.length === 1, 'teaching wave');
+    ok(JSON.stringify(genSets(7, mission(8))) === JSON.stringify(genSets(7, mission(8))), 'sets are seeded');
+    var r = simRide(W1[0], { lip: M1.A.lip, teach: true });
+    ok(r.made >= 1, 'the bot gets the teaching barrel (made ' + r.made + ', end ' + r.end + ')');
+    var j = judge(r, 1); ok(j.score > 2 && j.score <= 10, 'judge range ' + j.score);
+    ok(j.judges.length === 5, 'five judges');
+    var r2 = makeRide(W1[1], {}); r2.drop = 0; r2.d = -0.1; stepRide(r2, { u: 0 }, 0.016); ok(r2.end === 'wipe', 'white water catches you');
+    var r3 = makeRide({ len: 10, sz: 1, peel: 0.9, pitches: [{ t: 0.1, dur: 2 }] }, {}); r3.drop = 0; r3.t = 0.5; r3.d = 0.1; r3.y = 0.95; stepRide(r3, { u: 0 }, 0.016); ok(r3.end === 'wipe' && r3.cause === 'lip', 'the lip lands on a high surfer');
+    recover(r3); ok(r3.end === null && r3.d > 0.3, 'recover puts the surfer back on');
+    var idle = makeRide(W1[2], {}); for (var i = 0; i < 1500 && !idle.end; i++) stepRide(idle, { u: 0 }, 1 / 60);
+    var ji = judge(idle, 2); ok(ji.score < 3, 'doing nothing scores low (' + ji.score + ')');
+    ok(bestTwo([3, 7.5, 5]) === 12.5, 'best two');
+    // Fair: the bot clears every heat.
+    for (var n = 1; n <= 15; n++) {
+      var M = mission(n), ws = genSets(hash('surf-heat-' + n), M, n === 1), sc = [];
+      ws.filter(function (w) { return w.at < M.heat - 5; }).sort(function (a, b) { return potential(b) - potential(a); }).slice(0, 4)
+        .forEach(function (w, i) { sc.push(judge(simRide(w, { lip: M.A.lip, teach: !!w.teach }), i + n).score); });
+      ok(bestTwo(sc) > M.target, 'heat ' + n + ': bot ' + bestTwo(sc) + ' vs ' + M.target);
+    }
+    // ── Advanced ──
+    var T7 = techFor(7), flat = { len: 10, sz: 1.1, peel: 0.9, pitches: [] };
+    var f1 = makeRide(flat, { tech: T7 }); f1.drop = 0; f1.y = 0.9; f1.d = 0.3; f1.spd = 1;
+    var fe = stepRide(f1, { u: 0, act: true }, 1 / 60); ok(fe.some(function (e) { return e.k === 'floatUp'; }) && f1.floatT > 0, 'Space at the top near the curl = floater');
+    for (var q = 0; q < 80 && f1.floatT > 0; q++) stepRide(f1, { u: -1 }, 1 / 60); ok(f1.man.floater === 1, 'floater landed steering down');
+    var f0 = makeRide(flat, { tech: techFor(1) }); f0.drop = 0; f0.y = 0.9; f0.d = 0.3; f0.spd = 1; stepRide(f0, { u: 0, act: true }, 1 / 60); ok(!f0.floatT, 'no floater in mission 1');
+    function airRide(tapAt) {   // a fast bottom turn, drive up, tap at airT ≤ tapAt (null = never)
+      var a = makeRide(flat, { tech: T7 }); a.drop = 0; a.y = 0.8; a.d = 0.7; a.spd = 1.3; a.btT = 0; a.btS = 1.3; a.t = 0.2; a.vy = 1.6; var evs = [];
+      for (var z = 0; z < 120 && !a.end; z++) { var e = stepRide(a, { u: a.airT > 0 ? 0 : 1, act: tapAt !== null && a.airT > 0 && a.airT <= tapAt }, 1 / 60); evs = evs.concat(e); if (a.man.air || a.man.airS) break; }
+      return { r: a, ev: evs };
+    }
+    var A1 = airRide(0.12); ok(A1.ev.some(function (e) { return e.k === 'launch'; }) && A1.r.man.air === 1, 'aerial launched and stomped in the window');
+    var A2 = airRide(0.6); ok(A2.r.man.airS === 1 && A2.ev.some(function (e) { return e.k === 'airSketch' && e.ms > 300; }), 'an early stomp is sketchy and says how early');
+    var A3 = airRide(null); ok(A3.r.man.airS === 1, 'no stomp = sketchy landing');
+    var cw = { len: 10, sz: 1.5, peel: 0.95, pitches: [], close: { t: 3 } }, T11 = techFor(11);
+    var c1 = makeRide(cw, { tech: T11 }); c1.drop = 0; c1.t = 2.99; c1.y = 0.5; c1.d = 0.5; stepRide(c1, { u: 0 }, 1 / 60); ok(c1.end === 'wipe' && c1.cause === 'closeout', 'mid-face at a closeout = buried');
+    var c2 = makeRide(cw, { tech: T11 }); c2.drop = 0; c2.t = 2.99; c2.y = 0.9; c2.d = 0.5; c2.vy = 0; stepRide(c2, { u: 0 }, 1 / 60); ok(c2.end === 'kick', 'high at a closeout = kick out');
+    var c3 = makeRide(cw, { tech: T11 }); c3.drop = 0; c3.t = 2.5; c3.y = 0.9; c3.d = 0.5; c3.vy = 0; stepRide(c3, { u: 0, act: true }, 1 / 60);
+    for (var q2 = 0; q2 < 60 && !c3.closeDone; q2++) stepRide(c3, { u: 0 }, 1 / 60); ok(c3.man.closeFloat === 1 && !c3.end, 'floater over the closeout');
+    var cb = makeRide(flat, { tech: T7 }); cb.drop = 0; cb.y = 0.9; cb.d = 0.8; cb.spd = 1.1; var ce = stepRide(cb, { u: 0, act: true }, 1 / 60); cb.cd = 0; cb.y = 0.5; cb.d = 0.9; cb.spd = 1.1;
+    ce = ce.concat(stepRide(cb, { u: 0, act: true }, 1 / 60)); ok(cb.maxCombo === 2 && ce.some(function (e) { return e.k === 'combo'; }), 'snap then cutback = combo ×2');
+    var jc = judge(Object.assign({}, cb, { maxCombo: 4 }), 3).parts.combo; ok(jc > 0.8, 'combos score (' + jc + ')');
+    // the heat director: priority, interference, habits
+    var M6 = mission(6), w6 = genSets(5, M6), H6 = heatInit(M6, w6, 5);
+    ok(H6.on && H6.order[0] === 'you', 'heat 6: you start with priority');
+    var w0 = w6[0]; heatTick(H6, w0.at, true); ok(!w0.claim, 'with priority the wave waits for you');
+    var y0 = youCatch(H6, w0); ok(!y0.interference && H6.order[0] === 'r1', 'catching a wave sends you to the back');
+    ok(heatScore([8, 6], 1) === 11, 'interference halves the second-best wave');
+    var M8 = mission(8), w8 = genSets(9, M8), H8 = heatInit(M8, w8, 9), sets = {};
+    w8.forEach(function (w) { if (!sets[w.set]) sets[w.set] = w; });
+    H8.picks = [{ first: true }, { first: true }, { first: true }]; ok(habit(H8) === 'first', 'habit read: first wave of the set');
+    var fw = w8.filter(function (w) { return sets[w.set] === w && w.at > 10; })[0]; H8.order = ['r1', 'you']; H8.oi = w8.indexOf(fw); var ev8 = heatTick(H8, fw.at, true);
+    ok(fw.claim === 'r1' && ev8.some(function (e) { return e.k === 'read'; }), 'Mick takes the first wave of the set once he reads you');
+    // stars and rank
+    var st = { won: true, margin: 2.1, tech: { barrel: 1 }, wipes: 0, items: 0, interf: 0 };
+    ok(stars(1, st) === 3 && stars(1, Object.assign({}, st, { items: 1 })) === 2 && stars(1, Object.assign({}, st, { margin: 0.5 })) === 1 && stars(1, { won: false }) === 0, 'stars');
+    ok(rank(0) === 'Grommet' && rank(30) === 'Charger' && rank(45) === 'Bells Legend', 'rank titles');
+    // fair in the real heat format: the skilled policy wins every campaign heat
+    for (var n2 = 1; n2 <= 15; n2++) { var hh = simHeat(n2, 'skilled', hash('surf-heat-' + n2)); ok(hh.won, 'heat format ' + n2 + ': skilled ' + hh.total + ' vs ' + hh.opp.toFixed(2)); }
+    return { ok: !fails.length, fails: fails };
+  }
+  /** Clear rates per act and policy over many seeds (the "act 3 beats lazy play" check). */
+  function actRates(N) {
+    N = N || 40; var out = {};
+    ['skilled', 'polite', 'naive'].forEach(function (pol) {
+      out[pol] = [0, 0, 0];
+      for (var n = 1; n <= 15; n++) for (var k = 0; k < N; k++) if (simHeat(n, pol, hash('rates-' + k + '-' + n)).won) out[pol][Math.ceil(n / 5) - 1]++;
+      out[pol] = out[pol].map(function (x) { return Math.round(x / (5 * N) * 100); });
+    });
+    return out;
+  }
+  return { clamp: clamp, rng: rng, hash: hash, mission: mission, ACTS: ACTS, count: 15, genSets: genSets, potential: potential, makeRide: makeRide,
+           stepRide: stepRide, pitchAt: pitchAt, recover: recover, judge: judge, bestTwo: bestTwo, bot: bot, simRide: simRide, selfTest: selfTest,
+           techFor: techFor, closing: closing, airReady: airReady, AIRWIN: AIRWIN, heatInit: heatInit, heatTick: heatTick, youCatch: youCatch, youFirst: youFirst, heatScore: heatScore,
+           rivalBest: rivalBest, habit: habit, setInfo: setInfo, stars: stars, goalText: goalText, rank: rank, RANKS: RANKS, rideTech: rideTech, addTech: addTech,
+           techZero: techZero, simHeat: simHeat, actRates: actRates };
+})();
+if (typeof module !== 'undefined') module.exports = SURF;
+/*CORE-END*/
+</script>
+<script>
+(function () {
+  'use strict';
+  var GAME_ID = 'surf', SAVE_KEY = 'tm.surf.v1', TAU = Math.PI * 2;
+  var $ = function (id) { return document.getElementById(id); };
+  var C = SURF.clamp;
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var reduced = false; try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* old */ }
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (isTouch) {
+    document.body.classList.add('is-touch');
+    document.getElementById('controlsCard').innerHTML = '<div><kbd>drag</kbd> the left strip: steer up and down the face</div><div><kbd>PUMP</kbd> button: paddle in · pump · snap · cutback · stall · floater · stomp</div><div><kbd>&#8592; Back</kbd> top-left</div>';
+  }
+
+  // ══ Save ═══════════════════════════════════════════════════════════════════
+  var S;
+  function load() {
+    var s = null; try { s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { s = null; }
+    if (!s || s.v !== 1) s = { v: 1 };
+    s.cleared = s.cleared || {}; s.best = s.best || {};
+    s.tips = s.tips || {}; s.taught = s.taught || {};
+    s.mute = !!s.mute; s.motion = s.motion !== false; s.daily = s.daily || {}; s.barrels = s.barrels | 0; s.bestWave = +s.bestWave || 0;
+    s.stars = s.stars || {}; s.drills = s.drills || {}; s.techSeen = s.techSeen || {};   // stars per heat, drill bests
+    return s;
+  }
+  S = load();
+  function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { /* private mode */ } }
+  addEventListener('storage', function (e) { if (e.key === SAVE_KEY) S = load(); });
+  function motionOn() { return S.motion && !reduced; }
+
+  // ══ Words: Shazza, the surf-club captain ═══════════════════════════════════
+  var RIVALS = ['Pip', 'Mick', 'Jaz'];
+  function missionName(n) { var M = SURF.mission(n); return M ? 'Heat ' + n + ' · ' + M.name : 'Heat ' + n; }
+  function rivalName(M) { return RIVALS[(M.act || 1) - 1]; }
+  /** The words name Mick (act 2) and Jaz (act 3); on the page they are whoever RIVALS holds. */
+  function named(t) { return String(t).replace(/Mick/g, RIVALS[1]).replace(/Jaz/g, RIVALS[2]); }
+  var SAY = {
+    hello: 'Shazza: "Water\'s glassy, mate. Read the horizon and pick a good one."',
+    sets: ['"Set on the horizon — see how thick that line is? That\'s a big one."', '"Let the little one go. Patience wins heats."', '"Here she comes. Paddle, paddle!"'],
+    snap: ['Snap!', 'Top turn!', 'Lip smack!'], cut: ['Cutback!', 'Round-house!'], bottom: ['Bottom turn'],
+    warn: '"It\'s throwing! Stall, get low, let it come to you!"',
+    tube: ['PITTED!', 'Shacked!', 'Deep in the green room!'],
+    wipe: { white: 'The white water caught you. Go a bit faster: drop down the face, then pump.', falls: 'Over the falls! Near the curl the lip is no place to sit; come down the face.',
+            lip: 'The lip landed on you. When it throws, stay low-to-middle on the face, not up high.', closed: 'It closed out on you. In the barrel, keep pace with the curl: a pump or a drop keeps you out in front.',
+            closeout: 'Buried by the closeout. When Shazza calls it, climb high: Space to float over, or kick out.' },
+    miss: { early: 'Too early: wait for the ring to go green.', late: 'Missed it: paddle as the ring turns green.' },
+    horn: 'Hooter! That\'s the heat.',
+  };
+
+  // ══ Sound (WebAudio, all synthesised) ══════════════════════════════════════
+  var AC = null, master = null, lp = null, oceanG = null, noiseB = null;
+  function audio() {
+    if (AC || S.mute) return AC;
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      master = AC.createGain(); master.gain.value = 0.55;
+      lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 16000; lp.connect(master); master.connect(AC.destination);
+      noiseB = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate); var d = noiseB.getChannelData(0); for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      var src = AC.createBufferSource(); src.buffer = noiseB; src.loop = true; var f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600;
+      oceanG = AC.createGain(); oceanG.gain.value = 0.12; src.connect(f); f.connect(oceanG); oceanG.connect(lp); src.start();
+    } catch (e) { AC = null; }
+    return AC;
+  }
+  function nz(dur, freq, type, gain, q, delay) {
+    if (!AC || S.mute) return; var t = AC.currentTime + (delay || 0);
+    var s = AC.createBufferSource(); s.buffer = noiseB; var f = AC.createBiquadFilter(); f.type = type || 'bandpass'; f.frequency.value = freq; f.Q.value = q || 1;
+    var g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.04, dur / 4)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(lp); s.start(t, Math.random()); s.stop(t + dur + 0.05);
+  }
+  function tone(f0, dur, type, gain, f1, delay) {
+    if (!AC || S.mute) return; var t = AC.currentTime + (delay || 0);
+    var o = AC.createOscillator(); o.type = type || 'sine'; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    var g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.05);
+  }
+  var SFX = {
+    paddle: function () { nz(0.18, 900, 'bandpass', 0.18, 1.2); },
+    catch: function () { nz(0.7, 500, 'lowpass', 0.35, 0.7); tone(220, 0.4, 'triangle', 0.08, 440); },
+    pump: function () { nz(0.12, 1400, 'bandpass', 0.12, 2); },
+    carve: function () { nz(0.45, 2600, 'highpass', 0.3, 0.8); nz(0.3, 900, 'bandpass', 0.15, 1); },
+    bottom: function () { nz(0.35, 700, 'bandpass', 0.2, 1); },
+    warn: function () { nz(1.1, 300, 'lowpass', 0.4, 0.6); },
+    tubeIn: function () { if (lp) { lp.frequency.cancelScheduledValues(AC.currentTime); lp.frequency.setTargetAtTime(420, AC.currentTime, 0.12); } tone(110, 1.4, 'sine', 0.12, 90); },
+    spit: function () { if (lp) { lp.frequency.cancelScheduledValues(AC.currentTime); lp.frequency.setTargetAtTime(16000, AC.currentTime, 0.08); } nz(0.9, 3000, 'highpass', 0.45, 0.5); SFX.cheer(); },
+    wipe: function () { if (lp) lp.frequency.setTargetAtTime(16000, AC.currentTime, 0.05); nz(1.2, 260, 'lowpass', 0.6, 0.5); nz(0.6, 1500, 'bandpass', 0.2, 0.6, 0.1); },
+    cheer: function () { for (var i = 0; i < 4; i++) nz(1.2, 1100 + i * 350, 'bandpass', 0.07, 3, i * 0.06); },
+    horn: function () { tone(330, 1.2, 'sawtooth', 0.08); tone(415, 1.2, 'sawtooth', 0.06); },
+    bell: function () { tone(1320, 0.6, 'sine', 0.12); tone(1980, 0.4, 'sine', 0.05); },
+    miss: function () { tone(300, 0.25, 'triangle', 0.08, 200); },
+    click: function () { tone(880, 0.06, 'square', 0.03); },
+    gull: function () { tone(1700, 0.22, 'triangle', 0.025, 1200); tone(1600, 0.2, 'triangle', 0.02, 1100, 0.25); },
+    float: function () { nz(0.8, 1800, 'bandpass', 0.18, 0.7); tone(330, 0.7, 'sine', 0.05, 520); },
+    launch: function () { nz(0.5, 3200, 'highpass', 0.3, 0.6); tone(260, 0.6, 'triangle', 0.08, 780); },
+    stomp: function () { nz(0.25, 400, 'lowpass', 0.5, 0.8); SFX.cheer(); tone(523, 0.15, 'square', 0.04); tone(784, 0.25, 'square', 0.04, 0, 0.1); },
+    sketch: function () { nz(0.35, 500, 'lowpass', 0.4, 0.8); tone(240, 0.3, 'triangle', 0.06, 160); },
+    combo: function (k) { tone(660 + k * 110, 0.18, 'triangle', 0.06); },
+    close: function () { nz(1.6, 180, 'lowpass', 0.6, 0.5); nz(1.0, 900, 'bandpass', 0.2, 0.6, 0.3); },
+    whistle: function () { tone(2100, 0.5, 'square', 0.04, 1900); },
+    rival: function () { tone(520, 0.12, 'sine', 0.05); tone(390, 0.18, 'sine', 0.05, 0, 0.12); },
+  };
+  function setMute(m) { S.mute = m; save(); if (master) master.gain.value = m ? 0 : 0.55; if (!m) audio(); say(m ? 'Sound off' : 'Sound on'); }
+
+  // ══ Scenes ═════════════════════════════════════════════════════════════════
+  var SCENES = { title: 'sc-title', missions: 'sc-missions', how: 'sc-how', settings: 'sc-settings', pause: 'sc-pause', results: 'sc-results', play: null };
+  var scene = 'title';
+  function setScene(s) {
+    Object.keys(SCENES).forEach(function (k) { if (SCENES[k]) $(SCENES[k]).classList.toggle('on', k === s); });
+    scene = s;
+    $('back').classList.toggle('on', s === 'missions' || s === 'how' || s === 'settings' || s === 'results');
+    $('controlsCard').style.display = s === 'title' && innerHeight > 430 ? '' : 'none';
+    var hud = s === 'play' || s === 'pause';
+    $('hud').classList.toggle('on', hud);
+    $('pumpBtn').classList.toggle('on', s === 'play'); $('steerPad').classList.toggle('on', s === 'play');
+    if (!hud) { $('voice').classList.remove('on'); hideTip(); }
+    keys = {};
+    var first = SCENES[s] && $(SCENES[s]).querySelector('.play, .btn.hot, .btn, .mcard:not(.lock)');
+    if (first) try { first.focus({ preventScroll: true }); } catch (e) { /* old */ }
+  }
+  function goBack() {
+    if (scene === 'play') { pause(); return; }
+    if (scene === 'pause') { resume(); return; }
+    if (scene === 'results' || scene === 'missions' || scene === 'how' || scene === 'settings') { toTitle(); return; }
+  }
+  $('back').onclick = goBack;
+  function say(t) { $('live').textContent = t; }
+  var toastT = 0;
+  function toast(html, ms) { var t = $('toast'); t.innerHTML = html; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove('on'); }, ms || 2600); }
+  var voiceT = 0;
+  function voice(html, ms) { var v = $('voice'); v.innerHTML = '<b>Shazza</b> ' + html; v.classList.add('on'); clearTimeout(voiceT); voiceT = setTimeout(function () { v.classList.remove('on'); }, ms || 3200); }
+
+  // Teaching prompts: once per save, one at a time, skippable
+  var tipKey = null;
+  function tip(k, html) { if (S.taught[k] || tipKey === k) return; tipKey = k; $('tipText').innerHTML = html; $('tip').classList.add('on'); }
+  function doneTip(k) { if (k && tipKey !== k) { if (k) { S.taught[k] = 1; save(); } return; } if (tipKey) { S.taught[tipKey] = 1; save(); } tipKey = null; $('tip').classList.remove('on'); }
+  function hideTip() { tipKey = null; $('tip').classList.remove('on'); }
+  $('tipOk').onclick = function (e) { e.stopPropagation(); doneTip(); };
+
+  // ══ First Menu ═════════════════════════════════════════════════════════════
+  /** The heat path: the fifteen heats and Big Wave Day (heat 16), as opposed to the daily swell, The Shallows and drills. */
+  function paidMode(m) { return m === 'campaign' || m === 'top'; }
+  function nextMission() { for (var n = 1; n <= 15; n++) if (!S.cleared[n]) return n; return 15; }
+  function unlocked(n) { return n === 1 || !!S.cleared[n - 1] || !!S.cleared[n]; }
+  var TITLE_ROW = [
+    { label: 'Heats', act: function () { openMissions(); } },
+    { label: 'How to play', act: function () { setScene('how'); } },
+    { label: 'Settings', act: function () { paintSettings(); setScene('settings'); } },
+  ];
+  function buildTitle() {
+    var n = nextMission(), m = $('menu'); m.textContent = '';
+    if (S.cleared[15] && !S.cleared[16]) n = 16;   // the fifteen won: Big Wave Day is next on the path
+    var M = SURF.mission(n);
+    var b = document.createElement('button'); b.className = 'play';
+    b.innerHTML = 'Paddle out · Heat ' + n + '<small>' + esc(M.name) + ' · ' + esc(M.A.place) + ' · beat ' + esc(rivalName(M)) + '\'s ' + M.target.toFixed(2) + '</small>';
+    b.onclick = function () { begin(n === 16 ? 'top' : 'campaign', n); };
+    var pr = document.createElement('div'); pr.className = 'prow'; pr.append(b);
+    var st = starTotal(), rk = document.createElement('div'); rk.className = 'rank'; rk.title = 'Your rank comes from the stars you have won';
+    rk.innerHTML = 'Rank<b>' + esc(SURF.rank(st)) + '</b><span class="s">★ ' + st + '/45</span>'; pr.append(rk);
+    m.append(pr);
+    var row = document.createElement('div'); row.className = 'row';
+    TITLE_ROW.forEach(function (it) {
+      var x = document.createElement('button'); x.className = 'btn'; x.textContent = it.label; x.onclick = function () { SFX.click(); it.act(); }; row.append(x);
+    });
+    m.append(row);
+  }
+  function starTotal() { var t = 0; for (var n = 1; n <= 15; n++) t += S.stars[n] | 0; return t; }
+  function starStr(k) { k = k | 0; return '★★★'.slice(0, k) + '☆☆☆'.slice(0, 3 - k); }
+  function greet() {
+    var g = $('greet'); g.textContent = '';
+    var t = document.createElement('div');
+    var nb = 0; for (var k in S.cleared) if (S.cleared[k]) nb++;
+    t.textContent = nb ? 'Welcome back. ' + nb + ' board' + (nb > 1 ? 's' : '') + ' on the rack.' : 'Welcome to the coast. Press Paddle out.';
+    g.append(t);
+  }
+
+  // Missions panel: 15 cards in three rows of five
+  function openMissions() {
+    var L = $('mlist'); L.textContent = '';
+    for (var a = 1; a <= 3; a++) {
+      var A1 = SURF.ACTS[a], h = document.createElement('div'); h.className = 'act'; h.textContent = 'Act ' + a + ' · ' + A1.name + ' · ' + A1.place; L.append(h);
+      var g = document.createElement('div'); g.className = 'mgrid';
+      for (var n = a * 5 - 4; n <= a * 5; n++) g.append(missionCard(n));
+      L.append(g);
+    }
+    $('mTop').hidden = !S.cleared[15];
+    var D = $('mDrills'); D.textContent = '';
+    var hd = document.createElement('div'); hd.className = 'act'; hd.style.margin = '6px 0 0'; hd.style.width = '100%'; hd.textContent = 'The Shallows · drills (free)'; D.append(hd);
+    DRILLS.forEach(function (d) {
+      if (!drillOpen(d.k)) return;   // only the moves you have reached
+      var x = document.createElement('button'); x.className = 'btn'; var b = S.drills[d.k];
+      x.textContent = 'Drill · ' + d.name + (b ? ' (' + b + ')' : ''); x.onclick = function () { begin('drill', d.n, { drill: d.k }); }; D.append(x);
+    });
+    setScene('missions');
+  }
+  function missionCard(n) {
+    var M = SURF.mission(n), c = document.createElement('button'), open = unlocked(n);
+    c.className = 'mcard' + (S.cleared[n] ? ' done' : '') + (open ? '' : ' lock') + (M.final ? ' final' : '');
+    var st = !open ? 'Win heat ' + (n - 1) + ' first' : S.cleared[n] ? 'Won · best ' + (S.best[n] || 0).toFixed(2) : 'Open';
+    var gt = SURF.goalText(n), opp = M.rv.length ? M.rv.map(function (x) { return RIVALS[x.who]; }).join(' & ') + ' in the water' : 'Beat ' + esc(rivalName(M)) + ': ' + M.target.toFixed(2);
+    c.title = '★ win · ★★ ' + gt.two + ' · ★★★ ' + gt.three + ' (' + gt.clean + ')';
+    c.innerHTML = '<span>Heat ' + n + ' <span class="stars">' + starStr(S.stars[n]) + '</span></span><b>' + esc(M.name) + '</b><span>' + esc(opp) + '</span>' + (M.news ? '<span class="new">New: ' + esc(named(M.news)) + '</span>' : '') +
+      '<span class="goal">★★ ' + esc(gt.two) + ' · ★★★ ' + esc(gt.three) + '</span>' + '<span class="st">' + esc(st) + '</span>';
+    c.disabled = !open;
+    c.onclick = function () { if (open) begin('campaign', n); };
+    return c;
+  }
+  $('mDaily').onclick = function () { begin('daily', 8); };
+  $('mShallows').onclick = function () { begin('practice', 1); };
+  $('mTop').onclick = function () { begin('top', 16); };
+  // Drills in The Shallows: one short drill per move reached, with feedback after every try
+  var DRILLS = [{ k: 'barrel', name: 'Barrel', n: 1 }, { k: 'floater', name: 'Floater', n: 2 }, { k: 'air', name: 'Aerial', n: 7 }, { k: 'close', name: 'Closeout', n: 11 }];
+  function reached() { var m = 1; for (var n = 1; n <= 15; n++) if (S.cleared[n]) m = n + 1; return Math.min(16, m); }
+  function drillOpen(k) { var d = DRILLS.filter(function (x) { return x.k === k; })[0]; return !!d && reached() >= d.n; }
+
+  // Settings
+  function paintSettings() {
+    $('sSound').textContent = S.mute ? 'Off' : 'On';
+    $('sMotion').textContent = reduced ? 'Off (system)' : S.motion ? 'On' : 'Off';
+  }
+  $('sSound').onclick = function () { setMute(!S.mute); paintSettings(); };
+  $('sMotion').onclick = function () { S.motion = !S.motion; save(); paintSettings(); };
+  $('sTips').onclick = function () { S.taught = {}; save(); toast('Shazza will show her tips again.'); };
+
+  // ══ Boards ═════════════════════════════════════════════════════════════════
+  function drawBoard(g, x, y, len, ang, skin) {
+    g.save(); g.translate(x, y); g.rotate(ang);
+    var w = len * 0.17;
+    g.beginPath(); g.moveTo(-len / 2, 0); g.bezierCurveTo(-len * 0.35, -w, len * 0.3, -w, len / 2, -w * 0.15); g.bezierCurveTo(len * 0.3, w, -len * 0.35, w, -len / 2, 0); g.closePath();
+    var fin = skin === 'fin';
+    g.fillStyle = fin ? '#f4ead2' : skin === 'rival' ? '#7fd1c9' : '#fdfdf8'; g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = Math.max(1, len * 0.015); g.stroke();
+    g.fillStyle = fin ? '#ff7a59' : skin === 'rival' ? '#0a4f5a' : '#0f7c8c';
+    g.fillRect(-len * 0.38, -w * 0.08, len * 0.76, Math.max(1.5, w * 0.16));
+    if (fin) { g.fillStyle = '#e0a530'; g.fillRect(-len * 0.38, w * 0.18, len * 0.76, Math.max(1, w * 0.07)); }
+    g.restore();
+  }
+  function star(g, x, y, r) { g.fillStyle = '#ffd34d'; g.beginPath(); for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.45 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); }
+  // ══ The heat ═══════════════════════════════════════════════════════════════
+  var G = null, keys = {}, actQ = false, paused = false, ptrY = null, ptrActive = 0;
+  function begin(mode, n, opt) {
+    opt = opt || {};
+    audio();
+    var M = SURF.mission(n); if (!M) return false;
+    if (mode === 'daily') { var d = new Date().toISOString().slice(0, 10); M = Object.assign({}, M, { name: 'Daily swell ' + d, target: M.target }); }
+    var seed = mode === 'daily' ? SURF.hash('surf-daily-' + new Date().toISOString().slice(0, 10)) : mode === 'practice' || mode === 'drill' ? (Math.random() * 1e9) >>> 0 : SURF.hash('surf-heat-' + n);
+    var free = mode === 'practice' || mode === 'drill';
+    G = { mode: mode, n: n, M: M, seed: seed, t: 0, heat: free ? 1e9 : M.heat, waves: mode === 'drill' ? drillWaves(opt.drill, M) : SURF.genSets(seed, M, n === 1 && mode === 'campaign'),
+      wi: 0, phase: 'wait', ride: null, scores: [], rides: [], deaths: 0, padUntil: 0, over: false,
+      scroll: 0, fx: [], pops: [], slow: 0, flash: 0, tubeTint: 0, shake: 0, first: true, startReal: performance.now(), bestBefore: S.best[n] || 0,
+      tech: mode === 'practice' || mode === 'drill' ? SURF.techFor(Math.max(reached(), opt.drill ? 16 : 1)) : SURF.techFor(n), stat: SURF.techZero(), drill: opt.drill || null, dTry: 0, dOk: 0, rivalPops: [] };
+    G.H = free ? { on: false, rivals: [], order: ['you'], interf: 0, you: [] } : SURF.heatInit(M, G.waves, seed);
+    paintHud();
+    setScene('play'); paused = false; last = performance.now();
+    voice(n === 1 && mode === 'campaign' ? 'First heat! See the lines on the horizon? Each one\'s a wave coming. Thicker means bigger.' : esc(M.A.place) + '. ' + (mode === 'practice' ? 'The Shallows: no clock, no judges watching, just you and the sea.' : 'Beat ' + esc(rivalName(M)) + '\'s ' + M.target.toFixed(2) + ' with your best two waves.'), 4200);
+    if (mode === 'drill') { var D0 = DRILLS.filter(function (d) { return d.k === opt.drill; })[0]; voice('Drill · ' + D0.name + '. ' + DRILL_SAY[opt.drill], 5200); }
+    else if (mode !== 'practice') tip('sets', 'Lines on the horizon are waves coming. <b>Thicker = bigger = more points.</b>');
+    if (mode === 'campaign' || mode === 'top') techPrompt(n);
+    return true;
+  }
+  // One skippable prompt per new move or rule, the first heat it opens
+  var TECH_TIPS = [
+    [2, 'floater', 'New move · <b>FLOATER</b>: at the top of the face right by the curl, <kbd>Space</kbd> rides you over the breaking lip. Steer <b>down</b> to land it.'],
+    [6, 'heat', 'A real heat: <b>Mick</b> is in the water. The <b>priority</b> disc says who goes first. Catch a wave he is riding and it is <b>interference</b>: your second-best wave is halved.'],
+    [7, 'air', 'New move · <b>AERIAL</b>: a fast bottom turn (speed bar gold), then straight up into the lip and you launch. Tap <kbd>Space</kbd> as you come down to <b>stomp</b> it.'],
+    [8, 'habit', 'Mick now <b>reads your habits</b>. Take the first wave of every set and Mick starts taking it first. Mix it up.'],
+    [11, 'close', '<b>Closeouts</b>: when Shazza calls it, the section ahead shuts all at once. Climb high and <kbd>Space</kbd> to <b>float</b> over it, or stay high and kick out.'],
+    [12, 'deep', 'New move · <b>DEEP BARREL</b>: in the tube, sit right by the curl (the deep zone glows) for the biggest numbers.']];
+  function techPrompt(n) {
+    var t = null; TECH_TIPS.forEach(function (x) { if (n >= x[0] && !S.taught['adv-' + x[1]] && !t) t = x; });
+    if (t && !(n === 1)) setTimeout(function () { if (G && scene === 'play') tip('adv-' + t[1], named(t[2])); }, 4600);
+  }
+  var DRILL_SAY = { barrel: 'Stall when it throws, sit low by the curl. Deeper is better.', floater: 'Climb to the top near the curl and press Space; steer down to land.',
+    air: 'Bottom turn hard (gold speed), drive straight up, tap Space as you come down.', close: 'When it closes out: climb high and Space to float, or kick out high.' };
+  /** A drill: the same practice wave again and again, every 11 s. */
+  function drillWaves(k, M) {
+    var out = [], A = M.A;
+    for (var i = 0; i < 60; i++) {
+      var w = { id: i, set: i, at: 4 + i * 11, sz: A.sz[1], len: 9, pitches: [], peel: A.peel };
+      if (k === 'barrel') { w.pitches = [{ t: 3.0, dur: 3.2 }]; w.len = 9; }
+      if (k === 'close') { w.close = { t: 6.2 }; w.len = 9; }
+      out.push(w);
+    }
+    return out;
+  }
+  function catchWindow() { return 0.9; }
+  function waveNow() {   // the wave at the surfer right now (in its catch window) or the next one
+    var ws = G.waves, cw = catchWindow();
+    for (var i = G.wi; i < ws.length; i++) { var w = ws[i]; if (w.at + cw / 2 < G.t) continue; return { w: w, dt: w.at - G.t, open: Math.abs(w.at - G.t) <= cw / 2 }; }
+    return null;
+  }
+  function action() {
+    if (!G || scene !== 'play') return;
+    if (G.phase === 'wait') {
+      var x = waveNow();
+      if (x && x.open && G.t >= G.padUntil) { catchWave(x.w); return; }
+      SFX.paddle();
+      if (x && x.dt < 2.2 && x.dt > 0) { voice(SAY.miss.early, 1600); }
+      return;
+    }
+    if (G.phase === 'ride') actQ = true;
+  }
+  function catchWave(w) {
+    G.wi = G.waves.indexOf(w) + 1; G.phase = 'ride';
+    if (G.H.on) {
+      var res = SURF.youCatch(G.H, w);
+      if (res.interference) { var nm = rName(res.who); SFX.whistle(); pop('Interference!', '#ff6b5a', 1.2); voice('Interference! ' + esc(nm) + ' had priority on that one. Your second-best wave is halved.', 4200); G.flash = 0.3; }
+    }
+    G.ride = SURF.makeRide(w, { lip: G.M.A.lip, tech: G.tech });
+    G.ride.wave = w;
+    SFX.catch(); doneTip('sets'); doneTip('catch');
+    if (G.first) tip('steer', isTouch ? 'Drag the left strip to <b>steer</b>. Tap <b>PUMP</b> for speed.' : '<kbd>&#8593;</kbd><kbd>&#8595;</kbd> (or the mouse) to <b>steer</b>. Down the face = speed. <kbd>Space</kbd> pumps.');
+    G.first = false;
+  }
+  function endRide() {
+    var r = G.ride, w = r.wave, j = SURF.judge(r, (G.seed ^ (w.id * 7919)) >>> 0);
+    G.scores.push(j.score); G.rides.push({ score: j.score, judges: j.judges, lo: j.lo, hi: j.hi, sz: w.sz, barrels: r.made, tube: +r.tubeTotal.toFixed(1), end: r.end, cause: r.cause, man: r.man });
+    G.lastJ = { j: j, t: 4 }; SFX.bell();
+    SURF.addTech(G.stat, SURF.rideTech(r), j.score); G.H.you = G.scores.slice();
+    if (G.mode === 'drill') drillFeedback(r);
+    if (j.score > S.bestWave) { S.bestWave = j.score; save(); }
+    G.ride = null; G.phase = 'wait'; G.padUntil = G.t + 3.2;
+    // waves arriving while you paddle back out go by
+    while (G.wi < G.waves.length && G.waves[G.wi].at < G.padUntil + 0.5) G.wi++;
+    paintHud();
+    if (r.end !== 'wipe' && G.mode !== 'drill') voice(j.score >= 7 ? 'Ripper! The judges loved that: <b>' + j.score.toFixed(2) + '</b>.' : j.score >= 4 ? 'Solid wave: <b>' + j.score.toFixed(2) + '</b>. Paddle back out.' : 'Only <b>' + j.score.toFixed(2) + '</b>. Do more on the next one: turns at the top and bottom, and the barrel.', 3400);
+  }
+  function onRideEvent(e) {
+    var r = G.ride, M = G.M;
+    if (e.k === 'popped') { if (G.n === 1) tip('steer'); }
+    else if (e.k === 'pump') { SFX.pump(); doneTip('pump'); }
+    else if (e.k === 'brake') { SFX.bottom(); pop('Stall', '#bfe3e2', 0.6); }
+    else if (e.k === 'snap') { SFX.carve(); pop(pick(SAY.snap), '#fff8ec'); spray(1.2); }
+    else if (e.k === 'cut') { SFX.carve(); pop(pick(SAY.cut), '#ffd34d'); spray(1); }
+    else if (e.k === 'bottom') { SFX.bottom(); pop(SAY.bottom[0], '#bfe3e2', 0.7); spray(0.5); }
+    else if (e.k === 'warn') { SFX.warn(); voice(SAY.warn, 2200); tip('barrel', 'The lip is <b>throwing</b>! Press <kbd>Space</kbd> to <b>stall</b> until the curl reaches you, and sit <b>low-to-middle</b> on the face.'); }
+    else if (e.k === 'tubeIn') { SFX.tubeIn(); doneTip('barrel'); if (!S.barrels && motionOn()) G.slow = 1.8; }
+    else if (e.k === 'spit') {
+      SFX.spit(); S.barrels++; save(); spray(2.2); G.flash = 1; G.shake = 0.4;
+      pop(pick(SAY.tube) + ' ' + e.tube.toFixed(1) + ' s' + (e.deep ? ' · DEEP' : ''), '#7ff5e0', 1.5);
+      voice(S.barrels === 1 ? '"YOU GOT PITTED! That\'s the barrel, mate. The judges pay big for that."' : '"Out with the spit! ' + e.tube.toFixed(1) + ' seconds in there."', 3000);
+    }
+    else if (e.k === 'stall') { pop('Stalled at the lip', '#ffb3a3', 0.7); }
+    else if (e.k === 'floatUp') { SFX.float(); doneTip('adv-floater'); }
+    else if (e.k === 'floater') { SFX.carve(); pop('Floater!', '#ffd34d', 1.1); spray(1); }
+    else if (e.k === 'floaterSketch') { SFX.sketch(); pop('Wobbly floater', '#ffb3a3', 0.8); }
+    else if (e.k === 'launch') { SFX.launch(); doneTip('adv-air'); spray(1.6); if (motionOn() && !S.techSeen.air) { G.slow = 0.7; S.techSeen.air = 1; save(); } }
+    else if (e.k === 'air') { r.lastMs = e.ms; SFX.stomp(); pop('AIR · stomped!', '#7ff5e0', 1.5); spray(1.8); G.shake = 0.25; }
+    else if (e.k === 'airSketch') { r.lastMs = e.ms; SFX.sketch(); pop('Sketchy landing', '#ffb3a3', 0.9); }
+    else if (e.k === 'combo') { SFX.combo(e.n); pop('Combo ×' + e.n, '#ffb38a', 0.8 + e.n * 0.1); }
+    else if (e.k === 'closeWarn') { SFX.close(); voice('"Closing out! Get high — float it or kick out!"', 2000); }
+    else if (e.k === 'closeFloat') { SFX.stomp(); pop('Floated the closeout!', '#ffd34d', 1.3); spray(2); }
+    else if (e.k === 'wipe') {
+      SFX.wipe(); G.shake = 0.6; spray(2);
+      if (G.mode === 'campaign' || G.mode === 'top' || G.mode === 'daily') G.deaths++;
+      pop('Wipeout!', '#ff6b5a', 1.2);
+      var c = e.cause; if ((S.tips[c] | 0) < 2) { S.tips[c] = (S.tips[c] | 0) + 1; save(); voice(SAY.wipe[c], 4200); }
+    }
+    else if (e.k === 'end') { if (e.why === 'shoulder') pop('Out on the shoulder', '#bfe3e2', 0.8); else if (e.why === 'kickout') pop('Kicked out over the closeout', '#bfe3e2', 0.8); else pop('Kick out', '#bfe3e2', 0.6); }
+  }
+  function rName(id) { var R = G && G.H && G.H.rivals ? G.H.rivals.filter(function (x) { return x.id === id; })[0] : null; return R ? RIVALS[R.who] : 'A rival'; }
+  function habitSay(h, nm) { return h === 'best' ? 'has read you: you always wait for the biggest wave, so now ' + nm + ' sits on it.' : 'is onto you: you always take the first wave of a set, so now ' + nm + ' takes it first.'; }
+  function onHeatEvent(e) {
+    if (e.k === 'claim') { var nm = rName(e.who); SFX.rival(); if (e.why === 'late') voice(esc(nm) + ' is desperate: going on anything now!', 2400); else if (G.phase === 'wait') voice(esc(nm) + (G.H.order.indexOf('you') > 0 ? ' has priority and goes.' : ' takes the one you left.'), 2000); }
+    else if (e.k === 'post') { var n2 = rName(e.who); G.rivalPops.push({ text: n2 + ' ' + e.score.toFixed(2), t: 0 }); toast('<b>' + esc(n2) + '</b> scores ' + e.score.toFixed(2) + ' · best two ' + e.total.toFixed(2), 2600); paintHud(); }
+    else if (e.k === 'read') { var n3 = rName(e.who); voice(esc(n3) + ' ' + esc(habitSay(e.habit, n3)), 4600); }
+  }
+  /** What the drill try did, and one thing to fix ("early by 40 ms"). */
+  function drillFeedback(r) {
+    var k = G.drill, ok = false, line = '';
+    G.dTry++;
+    if (k === 'barrel') { ok = r.made > 0; line = ok ? 'Barrel ' + r.tubeTotal.toFixed(1) + ' s' + (r.deepMade ? ', deep ' + r.deepTotal.toFixed(1) + ' s!' : '. Sit closer to the curl for deep.') : r.end === 'wipe' ? 'Buried. Stall (Space) as it throws and stay low-to-middle.' : 'No barrel. Stall when it throws and let the curl catch you.'; }
+    else if (k === 'floater') { ok = r.man.floater > 0; line = ok ? 'Floater landed ×' + r.man.floater + '.' : r.man.floaterS ? 'You pushed up as you came off: steer down to land.' : 'Climb to the top right by the curl, then Space.'; }
+    else if (k === 'air') { ok = r.man.air > 0; line = ok ? 'Stomped! ' + timing(r.lastMs) : r.man.airS ? 'Sketchy landing: ' + (r.lastMs === null || r.lastMs === undefined ? 'no stomp. Tap Space as you come down.' : timing(r.lastMs)) : 'No launch: bottom turn hard (gold speed bar), then straight up.'; }
+    else if (k === 'close') { ok = r.man.closeFloat > 0; line = ok ? 'Floated the closeout!' : r.end === 'wipe' ? 'Buried: you stayed on the face. Climb high when Shazza calls it.' : 'Safe kick-out. For points: Space at the top as it closes.'; }
+    if (ok) G.dOk++;
+    S.drills[k] = G.dOk + '/' + G.dTry; save();
+    voice((ok ? '✓ ' : '✗ ') + esc(line) + ' <span style="opacity:.7">(' + G.dOk + ' of ' + G.dTry + ')</span>', 4200);
+  }
+  function timing(ms) { if (ms === null || ms === undefined) return ''; return Math.abs(ms) <= 40 ? 'right on time.' : (ms > 0 ? 'early by ' : 'late by ') + Math.abs(ms) + ' ms.'; }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function pop(text, col, big) { G.pops.push({ text: text, col: col, t: 0, big: big || 1, x: 0.6, y: 0.3 }); }
+  function spray(n) { if (!motionOn()) return; for (var i = 0; i < 24 * n; i++) G.fx.push({ x: 0, y: 0, vx: (Math.random() - 0.7) * 260, vy: -Math.random() * 300 - 60, t: 0, life: 0.6 + Math.random() * 0.6, r: 2 + Math.random() * 4, rel: true }); }
+
+  /** Your heat score (interference halves your second-best wave) and what you must beat: the leading rival's best two in a real heat, the posted mark in act 1. */
+  function myTotal() { return SURF.heatScore(G.scores, G.H.interf || 0); }
+  function oppTotal() { return G.H.on ? SURF.rivalBest(G.H) : G.M.target; }
+  function oppName() { if (!G.H.on) return rivalName(G.M); var b = null; G.H.rivals.forEach(function (r) { if (!b || SURF.bestTwo(r.scores) > SURF.bestTwo(b.scores)) b = r; }); return RIVALS[b.who]; }
+  function flushHeat() { if (G.H.on) SURF.heatTick(G.H, G.heat + 60, false).forEach(function (e) { if (e.k === 'post') onHeatEvent(e); }); }
+  function heatOver() {
+    if (G.mode === 'practice' || G.mode === 'drill') return;
+    flushHeat();
+    var tot = myTotal(), won = tot > oppTotal();
+    finish(won);
+  }
+  function finish(won) {
+    if (!G || G.over) return; G.over = true;
+    var tot = myTotal(), M = G.M, n = G.n, opp = oppTotal();
+    SFX.horn(); if (won) SFX.cheer();
+    var wipes = G.rides.filter(function (r) { return r.end === 'wipe'; }).length;
+    G.res = { won: won, margin: tot - opp, tech: G.stat, wipes: wipes, items: 0, interf: G.H.interf || 0, opp: opp };
+    G.res.stars = SURF.stars(n, G.res); G.prevStars = S.stars[n] | 0;
+    if ((G.mode === 'campaign' || G.mode === 'top') && G.res.stars > (S.stars[n] | 0)) { S.stars[n] = G.res.stars; save(); }
+    var prevBest = S.best[n] || 0;
+    if (paidMode(G.mode)) {
+      if (won) S.cleared[n] = 1;
+      if (tot > prevBest) S.best[n] = tot;
+      save();
+    } else if (G.mode === 'daily') { var d = new Date().toISOString().slice(0, 10); if (!S.daily[d] || tot > S.daily[d]) S.daily[d] = tot; save(); }
+    showResults(won, tot, prevBest);
+  }
+  function showResults(won, tot, prevBest) {
+    var M = G.M, n = G.n;
+    $('rttl').textContent = won ? 'The Scoreboard · heat won' : 'The Scoreboard';
+    $('rCalm').textContent = '';
+    if (paidMode(G.mode) && won) $('rCalm').textContent = 'Heat won. Shazza rings the club bell for you.';
+    else if (!paidMode(G.mode)) $('rCalm').textContent = G.mode === 'daily' ? 'The daily swell is for the bragging rights. Today\'s best: ' + (S.daily[new Date().toISOString().slice(0, 10)] || 0).toFixed(2) : 'A free surf.';
+    else $('rCalm').innerHTML = esc(oppName()) + ' takes this one, ' + oppTotal().toFixed(2) + ' to ' + tot.toFixed(2) + '. ' + esc(failTip());
+    var s = G.scores.slice(), best = s.slice().sort(function (a, b) { return b - a; }).slice(0, 2), used2 = {};
+    var h = '<div class="sub">' + esc(missionName(n)) + ' · ' + esc(M.A.place) + '</div>';
+    h += '<div style="font:900 40px Arial Black,sans-serif;color:' + (won ? '#ffd34d' : '#fff8ec') + '">' + tot.toFixed(2) + ' <span style="font-size:18px;color:#bfe3e2">vs ' + esc(oppName()) + ' ' + oppTotal().toFixed(2) + '</span></div>';
+    if (G.H.on) h += '<div class="sub">' + G.H.rivals.map(function (r) { return esc(RIVALS[r.who]) + ' ' + SURF.bestTwo(r.scores).toFixed(2) + ' (' + r.scores.length + ' waves)'; }).join(' · ') + (G.H.interf ? ' · <b style="color:#ff6b5a">Interference ×' + G.H.interf + '</b>' : '') + '</div>';
+    var hs = '';
+    if (G.res && (G.mode === 'campaign' || G.mode === 'top')) {
+      var gt = SURF.goalText(n), sk = G.res.stars, h0 = h; h = '';
+      h += '<div class="rstars">' + starStr(sk) + (sk > G.prevStars ? ' <span style="font-size:14px;color:#8fe3a5">new!</span>' : '') + '</div>';
+      h += '<div class="goal' + (sk >= 1 ? ' ok' : '') + '">★ win the heat</div><div class="goal' + (sk >= 2 ? ' ok' : '') + '">★★ ' + esc(gt.two) + ' (by ' + G.res.margin.toFixed(2) + ')</div><div class="goal' + (sk >= 3 ? ' ok' : '') + '">★★★ ' + esc(gt.three) + ' (' + esc(gt.clean) + ')</div>';
+      h += '<div class="goal">Rank: <b>' + esc(SURF.rank(starTotal())) + '</b> · ★ ' + starTotal() + '/45</div>';
+      hs = h; h = h0;
+    }
+    var tk = G.stat, tl = []; if (tk.floater) tl.push('floaters ' + tk.floater); if (tk.air) tl.push('airs ' + tk.air); if (tk.combo > 1) tl.push('best combo ×' + tk.combo); if (tk.deep) tl.push('deep barrels ' + tk.deep); if (tk.closeFloat) tl.push('closeouts floated ' + tk.closeFloat);
+    if (tl.length) hs += '<div class="sub">Moves: ' + esc(tl.join(' · ')) + '</div>';
+    $('rStars').innerHTML = hs;
+    if (paidMode(G.mode)) h += '<div>' + (prevBest ? 'Best ever: ' + prevBest.toFixed(2) + ' → ' + Math.max(prevBest, tot).toFixed(2) + (tot > prevBest ? ' &#9650;' : '') : 'First time in this heat') + '</div>';
+    h += '<div class="waves">' + (s.length ? s.map(function (x) { var b = best.indexOf(x) >= 0 && !used2[x]; if (b) used2[x] = 1; return '<span' + (b ? ' class="best"' : '') + '>' + x.toFixed(2) + '</span>'; }).join('') : '<span>no waves ridden</span>') + '</div>';
+    var top = null; G.rides.forEach(function (r) { if (!top || r.score > top.score) top = r; });
+    if (top) h += '<div class="sub">Your best wave, the five judges (high and low dropped):</div><div class="judges">' + top.judges.map(function (v, i) { return '<span' + (i === top.lo || i === top.hi ? ' class="drop"' : '') + '>' + v.toFixed(1) + '</span>'; }).join('') + '</div>';
+    var bar = G.rides.reduce(function (a, r) { return a + r.barrels; }, 0);
+    h += '<div>Barrels: <b>' + bar + '</b> · Wipeouts: <b>' + G.rides.filter(function (r) { return r.end === 'wipe'; }).length + '</b></div>';
+    if (won && paidMode(G.mode)) h += '<div style="margin-top:8px"><canvas id="rBoard" width="300" height="70" style="width:300px;height:70px"></canvas><div class="sub">A new board on your rack: the heat ' + n + ' board.</div></div>';
+    $('mine').innerHTML = h;
+    var cv = $('rBoard'); if (cv) { var g = cv.getContext('2d'); drawBoard(g, 150, 35, 260, -0.05, n % 5 === 0 ? 'fin' : 'house'); g.fillStyle = '#0a4f5a'; g.font = '900 14px Arial Black, sans-serif'; g.textAlign = 'center'; g.fillText('HEAT ' + n, 150, 40); }
+    var B = $('rBar'); B.textContent = '';
+    var add = function (t, hot, fn) { var b = document.createElement('button'); b.className = 'btn' + (hot ? ' hot' : ''); b.textContent = t; b.onclick = fn; B.append(b); };
+    if (G.mode === 'campaign' && won && n < 15) add('Next heat · ' + SURF.mission(n + 1).name, true, function () { begin('campaign', n + 1); });
+    else if (G.mode === 'campaign' && won && n === 15) add('Paddle out · Big Wave Day', true, function () { begin('top', 16); });
+    var mode = G.mode;
+    add(won ? 'Surf it again' : 'Try again', !(won && n <= 15 && mode === 'campaign'), function () { begin(mode, n); });
+    add('Heats', false, openMissions);
+    G.phase = 'over';
+    setScene('results');
+  }
+  function failTip() {
+    var w = G.rides.filter(function (r) { return r.end === 'wipe'; }).length, bar = G.rides.reduce(function (a, r) { return a + r.barrels; }, 0);
+    if (G.H.interf) return 'Shazza: watch the priority disc. A wave a rival with priority is riding is not yours: interference halved your second wave.';
+    if (G.H.on && G.H.rivals.some(function (r) { return r.read; })) return 'Shazza: they read your habit and took your waves. Mix it up: sometimes the first of the set, sometimes the last.';
+    if (G.scores.length < 2) return 'Shazza: catch more waves. Paddle in the moment the ring turns green.';
+    if (G.rides.some(function (r) { return r.cause === 'closeout'; })) return 'Shazza: the closeouts buried you. When I call it, climb high and float it.';
+    if (w >= 2) return 'Shazza: too many wipeouts. Near the curl, stay off the lip.';
+    if (!bar) return 'Shazza: the barrel is where the points are. When it throws, climb a little to slow down and sit beside the curl.';
+    return 'Shazza: pick the bigger waves of each set, and snap at the top when you are fast.';
+  }
+  function pause() { if (scene !== 'play') return; setScene('pause'); $('pSub').textContent = G ? missionName(G.n) + ' · ' + fmtClock(G.heat - G.t) + ' left' : ''; }
+  function resume() { setScene('play'); last = performance.now(); }
+  function toTitle() { G = null; buildTitle(); greet(); setScene('title'); }
+  $('pResume').onclick = resume;
+  $('pQuit').onclick = function () { toTitle(); };
+  function fmtClock(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function paintHud() {
+    if (!G) return;
+    $('hClockL').textContent = G.mode === 'practice' ? 'The Shallows' : G.mode === 'drill' ? 'Drill' : 'Heat ' + (paidMode(G.mode) ? G.n : '');
+    $('hClock').textContent = G.mode === 'practice' || G.mode === 'drill' ? '∞' : fmtClock(G.heat - G.t);
+    $('hTotal').textContent = myTotal().toFixed(2);
+    var free = G.mode === 'practice' || G.mode === 'drill';
+    $('hTarget').textContent = free ? (G.drill ? 'drill ' + G.dOk + '/' + G.dTry : '') : '/ ' + oppName() + ' ' + oppTotal().toFixed(2) + (G.H.interf ? ' · interference' : '');
+    var pc = $('hPrio'); pc.style.display = G.H.on ? '' : 'none';
+    if (G.H.on) { var o = G.H.order, first = o[0]; $('hPrioV').textContent = first === 'you' ? 'YOU' : rName(first); $('hPrioV').style.color = first === 'you' ? '#3fe08a' : '#ff9a7a';
+      $('hPrioL').textContent = 'Priority · then ' + o.slice(1).map(function (x) { return x === 'you' ? 'you' : rName(x); }).join(', '); }
+    $('hWaves').textContent = G.scores.length ? G.scores.map(function (s) { return s.toFixed(1); }).join(' · ') : '—';
+  }
+
+  // ══ Input ══════════════════════════════════════════════════════════════════
+  addEventListener('keydown', function (e) {
+    audio();
+    if (e.key === 'Escape') { e.preventDefault(); goBack(); return; }
+    if (e.code === 'KeyP' && (scene === 'play' || scene === 'pause')) { scene === 'play' ? pause() : resume(); return; }
+    if (e.code === 'KeyM') { setMute(!S.mute); return; }
+    if (scene !== 'play') return;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') { keys.up = true; ptrActive = 0; e.preventDefault(); }
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') { keys.down = true; ptrActive = 0; e.preventDefault(); }
+    if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) { e.preventDefault(); action(); }
+    if (e.code === 'Space') e.preventDefault();
+  });
+  addEventListener('keyup', function (e) { if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false; });
+  var cv = $('world'), ctx = cv.getContext('2d'), W = 0, H = 0, steerId = null;
+  cv.addEventListener('pointermove', function (e) { if (e.pointerType === 'mouse' && scene === 'play') { ptrY = e.clientY; ptrActive = 1; } else if (steerId === e.pointerId) { ptrY = e.clientY; ptrActive = 1; } });
+  cv.addEventListener('pointerdown', function (e) {
+    audio(); if (scene !== 'play') return;
+    if (e.pointerType !== 'mouse' && e.clientX < W * 0.45) { steerId = e.pointerId; ptrY = e.clientY; ptrActive = 1; return; }
+    action();
+  });
+  addEventListener('pointerup', function (e) { if (e.pointerId === steerId) steerId = null; });
+  var sp = $('steerPad');
+  sp.addEventListener('pointerdown', function (e) { e.preventDefault(); steerId = e.pointerId; try { sp.setPointerCapture(e.pointerId); } catch (x) { /* old */ } padSteer(e); });
+  sp.addEventListener('pointermove', function (e) { if (steerId === e.pointerId) padSteer(e); });
+  sp.addEventListener('pointerup', function () { steerId = null; ptrActive = 0; padU = 0; });
+  var padU = 0;
+  function padSteer(e) { var r = sp.getBoundingClientRect(); padU = C(-((e.clientY - r.top) / r.height - 0.5) * 2.4, -1, 1); ptrActive = 2; }
+  $('pumpBtn').addEventListener('pointerdown', function (e) { e.preventDefault(); audio(); action(); });
+
+  function steerInput() {
+    if (!G || !G.ride) return 0;
+    if (keys.up || keys.down) return (keys.up ? 1 : 0) - (keys.down ? 1 : 0);
+    if (ptrActive === 2) return padU;
+    if (ptrActive === 1 && ptrY !== null) { var L = layout(G.ride.sz), sy = L.yB - G.ride.y * L.Hf * 0.92; return C((sy - ptrY) / 50, -1, 1); }
+    return 0;
+  }
+
+  // ══ Loop ═══════════════════════════════════════════════════════════════════
+  function fit() { var d = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * d; cv.height = H * d; }
+  addEventListener('resize', fit);
+  var last = performance.now(), T = 0, hudT = 0;
+  function step(rdt) {
+    if (!G || scene !== 'play') return;
+    var dt = rdt;
+    if (G.slow > 0) { G.slow -= rdt; dt = rdt * 0.35; }
+    G.t += dt;
+    if (G.H.on && G.t < G.heat + 0.01) SURF.heatTick(G.H, G.t, G.phase === 'wait' && G.t >= G.padUntil).forEach(onHeatEvent);
+    G.rivalPops = G.rivalPops.filter(function (p) { p.t += rdt; return p.t < 3; });
+    if (G.phase === 'wait') {
+      var x = waveNow();
+      if (x && x.w.at + catchWindow() / 2 < G.t + dt) G.wi = G.waves.indexOf(x.w) + 1;
+      if (x && x.dt < 2.5 && x.dt > -0.5 && G.t > G.padUntil) tip('catch', 'A wave is here! Press <kbd>Space</kbd> when the ring turns <b style="color:#1d9e5a">green</b>.');
+      if (G.t >= G.heat) { heatOver(); return; }
+    } else if (G.phase === 'ride') {
+      var r = G.ride, inp = { u: steerInput(), act: actQ };
+      actQ = false;
+      var evs = SURF.stepRide(r, inp, dt);
+      evs.forEach(onRideEvent);
+      G.scroll += r.spd * dt;
+      if (r.end) endRide();
+    }
+    G.tubeTint += ((G.ride && G.ride.inTube ? 1 : 0) - G.tubeTint) * Math.min(1, rdt * 5);
+    G.flash = Math.max(0, G.flash - rdt * 2); G.shake = Math.max(0, G.shake - rdt);
+    G.pops = G.pops.filter(function (p) { p.t += rdt; return p.t < 1.4; });
+    G.fx = G.fx.filter(function (p) { p.t += rdt; p.vy += 500 * rdt; p.x += p.vx * rdt; p.y += p.vy * rdt; return p.t < p.life; });
+    if (G.lastJ) G.lastJ.t -= rdt;
+    hudT -= rdt; if (hudT <= 0) { hudT = 0.25; paintHud(); }
+  }
+
+  // ══ Drawing ════════════════════════════════════════════════════════════════
+  var SKY = [['#ffb38a', '#ffd9b5', '#8fd3d1'], ['#9fb7c9', '#d7e2e6', '#7ab4b8'], ['#ff9a5a', '#ffd27a', '#6cc2c0']];
+  function sky(g, k, horizon, t) {
+    var c = SKY[k] || SKY[0], gr = g.createLinearGradient(0, 0, 0, horizon);
+    gr.addColorStop(0, c[2]); gr.addColorStop(0.6, c[1]); gr.addColorStop(1, c[0]); g.fillStyle = gr; g.fillRect(0, 0, W, horizon + 2);
+    var sx = W * 0.78, sy = horizon - (k === 1 ? 40 : 18) - Math.sin(t * 0.02) * 4;
+    var sg = g.createRadialGradient(sx, sy, 4, sx, sy, 120); sg.addColorStop(0, k === 1 ? 'rgba(255,255,240,.9)' : 'rgba(255,240,200,1)'); sg.addColorStop(0.2, k === 1 ? 'rgba(255,255,240,.3)' : 'rgba(255,190,120,.6)'); sg.addColorStop(1, 'rgba(255,190,120,0)');
+    g.fillStyle = sg; g.fillRect(sx - 130, sy - 130, 260, 260);
+    g.fillStyle = 'rgba(255,255,255,.35)';
+    for (var i = 0; i < 4; i++) { var cx = ((i * 330 + t * (6 + i)) % (W + 300)) - 150, cy = horizon * (0.25 + i * 0.12); g.beginPath(); g.ellipse(cx, cy, 80 + i * 16, 10 + i * 2, 0, 0, TAU); g.fill(); }
+  }
+  function headland(g, horizon, k) {
+    g.fillStyle = k === 2 ? '#7a6a4f' : '#5e7a5a';
+    g.beginPath(); g.moveTo(0, horizon); for (var x = 0; x <= W * 0.35; x += 10) g.lineTo(x, horizon - 30 * Math.sin(Math.min(1, (W * 0.35 - x) / (W * 0.35)) * 1.4) - 6); g.lineTo(W * 0.35, horizon); g.closePath(); g.fill();
+    g.fillStyle = '#e8c58a'; g.fillRect(0, horizon - 3, W * 0.33, 3);
+  }
+  function layout(sz) { var yB = H * 0.9, Hf = Math.min(H * 0.62, H * 0.4 * (0.62 + 0.38 * sz)); return { yB: yB, Hf: Hf, sx: W * 0.6, unit: W * 0.5, horizon: H * 0.26 }; }
+
+  function drawTitle(t) {
+    var horizon = H * 0.5;
+    sky(ctx, 0, horizon, t);
+    headland(ctx, horizon, 0);
+    var sea = ctx.createLinearGradient(0, horizon, 0, H); sea.addColorStop(0, '#5fb3b3'); sea.addColorStop(1, '#0f7c8c'); ctx.fillStyle = sea; ctx.fillRect(0, horizon, W, H - horizon);
+    // rolling lines, a peeling wave mid-distance
+    for (var i = 0; i < 7; i++) {
+      var f = ((t * 0.05 + i / 7) % 1), y = horizon + f * f * (H * 0.3);
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.15 + f * 0.5) + ')'; ctx.lineWidth = 1 + f * 4;
+      ctx.beginPath(); for (var x = 0; x <= W; x += 16) ctx.lineTo(x, y + Math.sin(x * 0.01 + t + i) * 2 * f); ctx.stroke();
+      var pk = ((t * 40 + i * 200) % (W + 200)) - 100;
+      if (f > 0.4) { ctx.fillStyle = 'rgba(255,255,255,' + (f * 0.7) + ')'; ctx.beginPath(); ctx.ellipse(pk, y, 60 * f, 4 * f, 0, 0, TAU); ctx.fill(); }
+    }
+    // the sand
+    var sandY = H * 0.8;
+    ctx.fillStyle = '#f2d49b'; ctx.beginPath(); ctx.moveTo(0, sandY); for (var x2 = 0; x2 <= W; x2 += 20) ctx.lineTo(x2, sandY + Math.sin(x2 * 0.006 + 1) * 10); ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); for (var x3 = 0; x3 <= W; x3 += 20) ctx.lineTo(x3, sandY - 2 + Math.sin(x3 * 0.006 + 1) * 10 + Math.sin(t * 1.2 + x3 * 0.02) * 3); ctx.lineTo(W, sandY - 8); ctx.lineTo(0, sandY - 8); ctx.closePath(); ctx.fill();
+    // surf club tower with its red-and-yellow flags
+    var tx = W * 0.86, ty = sandY - 4;
+    ctx.fillStyle = '#e9e1cf'; ctx.fillRect(tx - 34, ty - 120, 68, 50); ctx.fillStyle = '#c0392b'; ctx.fillRect(tx - 40, ty - 130, 80, 12);
+    ctx.fillStyle = '#2b2b2b'; ctx.fillRect(tx - 26, ty - 108, 52, 18);
+    ctx.strokeStyle = '#7a5a3a'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(tx - 28, ty - 70); ctx.lineTo(tx - 36, ty); ctx.moveTo(tx + 28, ty - 70); ctx.lineTo(tx + 36, ty); ctx.moveTo(tx - 32, ty - 35); ctx.lineTo(tx + 32, ty - 35); ctx.stroke();
+    flag(tx + 50, ty - 150, t); flag(W * 0.62, sandY + 6, t + 1);
+    // norfolk pines
+    for (var p = 0; p < 3; p++) pine(W * (0.93 + p * 0.03), sandY - 10, 90 + p * 20);
+    // the rack of boards (the keepsake): one per heat won
+    var rx = W * 0.55, ry = sandY + 30, nb = 0;
+    ctx.fillStyle = '#7a5a3a'; ctx.fillRect(rx - 6, ry - 10, 8, 80); ctx.fillRect(rx + 210, ry - 10, 8, 80); ctx.fillRect(rx - 6, ry + 10, 224, 6);
+    for (var n = 1; n <= 15; n++) if (S.cleared[n]) { drawBoard(ctx, rx + 6 + nb * 13.5, ry - 18, 110, -Math.PI / 2 + 0.05, n % 5 === 0 ? 'fin' : 'house'); nb++; }
+    ctx.fillStyle = 'rgba(10,79,90,.8)'; ctx.font = '700 12px Trebuchet MS, sans-serif'; ctx.fillText(nb ? 'Your rack · ' + nb + ' board' + (nb > 1 ? 's' : '') : 'Your rack', rx, ry + 34);
+    // gulls
+    for (var gq = 0; gq < 3; gq++) { var gx = ((t * (30 + gq * 8) + gq * 300) % (W + 100)) - 50, gy = H * (0.15 + gq * 0.07) + Math.sin(t * 2 + gq) * 6, fl = Math.sin(t * 8 + gq) * 5; ctx.strokeStyle = '#334'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(gx - 10, gy - fl); ctx.quadraticCurveTo(gx - 4, gy - 6, gx, gy); ctx.quadraticCurveTo(gx + 4, gy - 6, gx + 10, gy - fl); ctx.stroke(); }
+  }
+  function flag(x, y, t) {
+    ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 60); ctx.stroke();
+    for (var h = 0; h < 2; h++) { ctx.fillStyle = h ? '#f2c200' : '#d6261e'; ctx.beginPath(); ctx.moveTo(x, y + h * 9); for (var i = 0; i <= 6; i++) ctx.lineTo(x + i * 5, y + h * 9 + Math.sin(t * 5 + i) * (motionOn() ? 2 : 0)); for (var j = 6; j >= 0; j--) ctx.lineTo(x + j * 5, y + h * 9 + 9 + Math.sin(t * 5 + j) * (motionOn() ? 2 : 0)); ctx.closePath(); ctx.fill(); }
+  }
+  function pine(x, y, h) { ctx.fillStyle = '#5a3b22'; ctx.fillRect(x - 2, y - h, 4, h); ctx.fillStyle = '#244a33'; for (var i = 0; i < 6; i++) { var yy = y - h + i * h * 0.13, w = 8 + i * 5; ctx.fillRect(x - w, yy, w * 2, 4); } }
+
+  function surfer(g, x, y, ang, crouch, t) {
+    drawBoard(g, x, y + 4, 54, ang, 'house');
+    g.save(); g.translate(x, y); g.rotate(ang * 0.6);
+    var c = crouch || 0;
+    g.strokeStyle = '#11262b'; g.lineWidth = 6; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(-9, 0); g.lineTo(-6, -12 + c * 4); g.lineTo(-2, -26 + c * 8); g.moveTo(9, 0); g.lineTo(6, -12 + c * 4); g.lineTo(2, -26 + c * 8); g.stroke();   // legs
+    g.beginPath(); g.moveTo(0, -26 + c * 8); g.lineTo(0, -42 + c * 12); g.stroke();   // body
+    g.lineWidth = 4; g.beginPath(); g.moveTo(0, -38 + c * 12); g.lineTo(-16, -30 + c * 10 + Math.sin(t * 3) * 3); g.moveTo(0, -38 + c * 12); g.lineTo(16, -34 + c * 10 - Math.sin(t * 3) * 3); g.stroke();   // arms
+    g.fillStyle = '#f0923a'; g.beginPath(); g.arc(0, -49 + c * 12, 7, 0, TAU); g.fill();   // the head
+    g.fillStyle = '#11262b'; g.fillRect(-4, -55 + c * 12, 2, 5); g.fillRect(2, -55 + c * 12, 2, 5);
+    g.fillStyle = '#f0923a'; g.beginPath(); g.arc(-5, -55 + c * 12, 2.5, 0, TAU); g.arc(5, -55 + c * 12, 2.5, 0, TAU); g.fill();
+    g.restore();
+  }
+
+  var RCOL = ['#ffd34d', '#ff9a3c', '#c38bff'];
+  function prioDisc(x, y, k, col) {
+    ctx.fillStyle = k === 1 ? col : 'rgba(4,34,40,.8)'; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 11, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = k === 1 ? '#0a2a30' : '#fff8ec'; ctx.font = '900 12px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(k === 1 ? 'P' : String(k), x, y + 4); ctx.textAlign = 'left';
+  }
+  function drawLineup(t) {
+    var M = G.M, horizon = H * 0.4;
+    sky(ctx, M.A.sky, horizon, t); headland(ctx, horizon, M.A.sky);
+    var sea = ctx.createLinearGradient(0, horizon, 0, H); sea.addColorStop(0, '#3f9fa5'); sea.addColorStop(1, '#0a4f5a'); ctx.fillStyle = sea; ctx.fillRect(0, horizon, W, H - horizon);
+    var sY = H * 0.74, look = 16;
+    // set lines: thickness shows the size (the twist)
+    for (var i = G.wi; i < G.waves.length; i++) {
+      var w = G.waves[i], dt = w.at - G.t; if (dt > look) break; if (dt < -1) continue;
+      var f = C(1 - dt / look, 0, 1.08), y = horizon + Math.pow(f, 1.7) * (sY - horizon);
+      var th = (2 + w.sz * 12) * (0.3 + f);
+      ctx.fillStyle = 'rgba(8,60,70,.75)'; ctx.fillRect(0, y - th, W, th);
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.35 + 0.5 * f) + ')'; ctx.fillRect(0, y - th, W, Math.max(1, th * 0.2));
+      if (f > 0.25) { ctx.fillStyle = 'rgba(255,248,236,.9)'; ctx.font = '700 ' + Math.round(10 + f * 4) + 'px Trebuchet MS, sans-serif'; ctx.fillText(Math.round(w.sz * 4) + ' ft', 10, y - th - 3); }
+      if (w.claim && w.claim !== 'you' && f > 0.2) { var cr = G.H.rivals.filter(function (q) { return q.id === w.claim; })[0]; if (cr) { ctx.fillStyle = RCOL[cr.who]; ctx.font = '900 ' + Math.round(11 + f * 5) + 'px Arial Black, sans-serif'; ctx.fillText(RIVALS[cr.who].toUpperCase() + '\'S WAVE', W * 0.62, y - th - 4); } }
+      if (w.close && f > 0.25) { ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = '700 ' + Math.round(10 + f * 3) + 'px Trebuchet MS, sans-serif'; ctx.fillText('closes out', W * 0.24, y - th - 3); }
+    }
+    // the rivals in the lineup, each with the priority disc (1 = priority)
+    if (G.H.on) {
+      var spots = [W * 0.27, W * 0.74];
+      G.H.rivals.forEach(function (R, i) {
+        var rx = spots[i] || W * 0.85, riding = R.busy > G.t + 3.2, back = R.busy > G.t && !riding, ry = sY - 14 + (motionOn() ? Math.sin(t * 2 + i * 2) * 3 : 0);
+        if (riding) { ctx.fillStyle = 'rgba(255,248,236,.75)'; ctx.font = '700 12px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(RIVALS[R.who] + ' is riding…', rx, sY - 4); ctx.textAlign = 'left'; return; }
+        ctx.save(); ctx.translate(rx, ry + (back ? 26 : 0)); ctx.globalAlpha = back ? 0.6 : 1;
+        drawBoard(ctx, 0, 6, 48, 0, 'house'); ctx.strokeStyle = '#11262b'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(0, -14); ctx.stroke();
+        ctx.fillStyle = RCOL[R.who]; ctx.beginPath(); ctx.arc(0, -21, 6, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#fff8ec'; ctx.font = '700 12px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(RIVALS[R.who] + (back ? ' · paddling' : ''), 0, 26);
+        ctx.restore(); ctx.textAlign = 'left';
+        prioDisc(rx + 18, ry - 34, G.H.order.indexOf(R.id) + 1, RCOL[R.who]);
+      });
+      prioDisc(W * 0.5 + 22, sY - 50, G.H.order.indexOf('you') + 1, '#3fe08a');
+    }
+    G.rivalPops.forEach(function (p, i) { ctx.globalAlpha = C(3 - p.t, 0, 1); ctx.fillStyle = '#fff8ec'; ctx.font = '900 18px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p.text, W * 0.5, horizon + 30 + i * 22); ctx.textAlign = 'left'; ctx.globalAlpha = 1; });
+    var bob = motionOn() ? Math.sin(t * 2) * 3 : 0;
+    var x = waveNow(), paddling = G.t < G.padUntil;
+    ctx.save(); ctx.translate(W * 0.5, sY + bob);
+    drawBoard(ctx, 0, 6, 60, 0, 'house');
+    ctx.strokeStyle = '#11262b'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(0, -18); ctx.stroke();
+    ctx.fillStyle = '#f0923a'; ctx.beginPath(); ctx.arc(0, -26, 7, 0, TAU); ctx.fill();
+    ctx.restore();
+    if (paddling) { ctx.fillStyle = '#fff8ec'; ctx.font = '700 15px Trebuchet MS, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Paddling back out…', W * 0.5, sY + 50); ctx.textAlign = 'left'; }
+    else if (x && x.dt < 2.5) {
+      var cw = catchWindow(), open = x.open, k = C(x.dt / 2.5, 0, 1), theirs = x.w.claim && x.w.claim !== 'you';
+      ctx.strokeStyle = theirs ? '#ff6b5a' : open ? '#3fe08a' : 'rgba(255,248,236,.85)'; ctx.lineWidth = open ? 6 : 3;
+      ctx.beginPath(); ctx.arc(W * 0.5, sY - 8, 34 + k * 70, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = 'rgba(63,224,138,.45)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(W * 0.5, sY - 8, 34 + (cw / 2 / 2.5) * 70, 0, TAU); ctx.stroke();
+      if (theirs) { ctx.fillStyle = '#ff6b5a'; ctx.font = '900 18px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(rName(x.w.claim).toUpperCase() + ' HAS PRIORITY', W * 0.5, sY - 60 - k * 70); ctx.textAlign = 'left'; }
+      else if (open) { ctx.fillStyle = '#3fe08a'; ctx.font = '900 22px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('PADDLE!', W * 0.5, sY - 60 - k * 70); ctx.textAlign = 'left'; }
+    }
+    if (G.t >= G.heat - 10 && G.mode !== 'practice') { ctx.fillStyle = '#ff7a59'; ctx.font = '900 18px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(Math.ceil(G.heat - G.t) + ' s to the hooter', W * 0.5, H * 0.95); ctx.textAlign = 'left'; }
+  }
+
+  function drawRide(t) {
+    var r = G.ride, M = G.M, L = layout(r.sz), yB = L.yB, Hf = L.Hf, u = L.unit, sx = L.sx, curlX = sx - r.d * u;
+    var sh = G.shake > 0 && motionOn() ? (Math.random() - 0.5) * 10 * G.shake : 0;
+    ctx.save(); ctx.translate(sh, sh * 0.6);
+    sky(ctx, M.A.sky, L.horizon, t); headland(ctx, L.horizon, M.A.sky);
+    var sea = ctx.createLinearGradient(0, L.horizon, 0, H); sea.addColorStop(0, '#4aa7aa'); sea.addColorStop(1, '#0c5b66'); ctx.fillStyle = sea; ctx.fillRect(-20, L.horizon, W + 40, H);
+    function faceH(x) { var xr = (x - curlX) / u; return xr < 0 ? Hf * (1 - 0.15 * C(-xr * 0.3, 0, 1)) : Hf * (1 - 0.68 * C((xr - 0.8) / 1.1, 0, 1)); }
+    // the face
+    var gr = ctx.createLinearGradient(0, yB - Hf, 0, yB + 20); gr.addColorStop(0, '#7fe0d4'); gr.addColorStop(0.25, '#2fa6a8'); gr.addColorStop(0.75, '#0f7c8c'); gr.addColorStop(1, '#0a4f5a');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(-20, H + 10);
+    for (var x = -20; x <= W + 20; x += 8) ctx.lineTo(x, yB - faceH(x) + Math.sin(x * 0.02 + t * 2) * 3);
+    ctx.lineTo(W + 20, H + 10); ctx.closePath(); ctx.fill();
+    // face streaks moving past (speed)
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 2;
+    for (var k = 0; k < 9; k++) { var fy = yB - Hf * (0.1 + k * 0.09), off = ((G.scroll * u * 0.9 + k * 137) % 180); for (var xs = W + 40 - off; xs > curlX; xs -= 180) { if (fy < yB - faceH(xs) + 6) continue; ctx.beginPath(); ctx.moveTo(xs, fy); ctx.lineTo(xs + 40 + k * 4, fy + 2); ctx.stroke(); } }
+    // lip highlight
+    ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 3; ctx.beginPath(); for (var x2 = Math.max(0, curlX); x2 <= W; x2 += 8) ctx.lineTo(x2, yB - faceH(x2) + Math.sin(x2 * 0.02 + t * 2) * 3); ctx.stroke();
+    // the barrel: a lip throwing over beside the curl
+    var P = SURF.pitchAt(r);
+    if (P) {
+      var pr = r.t < P.t ? C(1 - (P.t - r.t) / 1.3, 0, 1) * 0.5 : Math.min(1, 0.5 + (r.t - P.t) * 1.6), end = P.t + P.dur, closing = C((r.t - (end - 0.5)) / 0.5, 0, 1);
+      var reach = (0.26 + 0.06) * u * pr * (1 - closing * 0.7), lx = curlX - 10, ly = yB - Hf;
+      ctx.fillStyle = 'rgba(4,52,60,.6)'; ctx.beginPath(); ctx.moveTo(lx, ly); ctx.quadraticCurveTo(lx + reach * 1.1, ly - 20, lx + reach, yB - Hf * (0.95 - 0.8 * pr)); ctx.lineTo(lx + reach * 0.4, yB); ctx.lineTo(lx, yB); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(160,240,230,.95)'; ctx.lineWidth = 12 + 8 * pr; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(lx, ly + 4); ctx.quadraticCurveTo(lx + reach * 1.1, ly - 20, lx + reach, yB - Hf * (0.95 - 0.8 * pr)); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 3; ctx.stroke();
+    }
+    // the white water behind the curl
+    for (var f = 0; f < 60; f++) {
+      var fx = curlX - ((f * 53 + G.scroll * 30) % (curlX + 60)), fy2 = yB - ((f * 97) % 100) / 100 * faceH(fx) * 1.02, rr = 12 + (f % 5) * 7 + Math.sin(t * 3 + f) * 3;
+      if (fx < -40) continue; ctx.fillStyle = 'rgba(255,255,255,' + (0.55 + (f % 3) * 0.15) + ')'; ctx.beginPath(); ctx.arc(fx, fy2, rr, 0, TAU); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillRect(-20, yB - 6, curlX + 20, H);
+    // act 3: the closeout — the section ahead turning white all at once
+    if (r.close && r.t >= r.close.t - 1.4) {
+      var ck = C((r.t - (r.close.t - 1.4)) / 1.4, 0, 1), cx0 = sx + 60 - ck * 40;
+      for (var ci = 0; ci < 26; ci++) { var ccx = cx0 + (ci * 61) % Math.max(60, W - cx0 + 40), ccy = yB - Hf * ((ci * 37) % 100) / 100 * (0.3 + 0.7 * ck), crr = 8 + (ci % 4) * 6 * ck; ctx.fillStyle = 'rgba(255,255,255,' + (0.35 + 0.5 * ck) + ')'; ctx.beginPath(); ctx.arc(ccx, ccy, crr, 0, TAU); ctx.fill(); }
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 + 0.4 * ck) + ')'; ctx.lineWidth = 6 + 22 * ck; ctx.lineCap = 'round'; ctx.beginPath();
+      for (var cxx = cx0; cxx <= W + 20; cxx += 10) ctx.lineTo(cxx, yB - faceH(cxx) + 4 + ck * 10 + Math.sin(cxx * 0.05 + t * 6) * 3); ctx.stroke();
+    }
+    // the deep zone inside a throwing barrel (from heat 11)
+    if (P && r.t >= P.t && G.tech.deep) { ctx.fillStyle = 'rgba(127,245,224,.16)'; ctx.fillRect(curlX - 4, yB - Hf * 0.64, u * 0.09 + 8, Hf * 0.5); }
+    // the surfer
+    var sy = yB - r.y * Hf * 0.92 - 6, ang = C(-r.vy * 0.35, -0.7, 0.7) + (r.cutT > 0 ? -0.6 : 0);
+    if (r.drop > 0) ang = 0.5;
+    var crouch = r.inTube ? 1 : r.drop > 0 ? 0.6 : 0.2;
+    // wake
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx - 20, sy + 6); ctx.quadraticCurveTo(sx - 60, sy + 10 + r.vy * 14, sx - 110, sy + 20 + r.vy * 30); ctx.stroke();
+    if (r.airT > 0) ang = -0.25 + Math.sin(t * 9) * 0.15;
+    surfer(ctx, sx, sy, ang, crouch, t);
+    if (r.airT > 0) {   // the stomp ring: it closes onto the board; tap as it turns gold
+      var win = r.airT <= SURF.AIRWIN, rr2 = 16 + 60 * C(r.airT / r.airMax, 0, 1);
+      ctx.strokeStyle = win ? '#ffd34d' : 'rgba(255,248,236,.8)'; ctx.lineWidth = win ? 6 : 3; ctx.beginPath(); ctx.arc(sx, sy - 20, rr2, 0, TAU); ctx.stroke();
+      ctx.fillStyle = win ? '#ffd34d' : '#fff8ec'; ctx.font = '900 16px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(win ? 'STOMP!' : 'AIR', sx, sy - 34 - rr2); ctx.textAlign = 'left';
+    }
+    // spray particles
+    G.fx.forEach(function (p) { ctx.fillStyle = 'rgba(255,255,255,' + (1 - p.t / p.life) + ')'; ctx.beginPath(); ctx.arc(sx + p.x, sy + p.y, p.r, 0, TAU); ctx.fill(); });
+    ctx.restore();
+    // inside the tube: the screen goes blue-green and quiet
+    if (G.tubeTint > 0.02) {
+      var a = G.tubeTint, vg = ctx.createRadialGradient(sx, sy, 30, sx, sy, Math.max(W, H) * 0.7);
+      vg.addColorStop(0, 'rgba(60,200,180,' + (0.12 * a) + ')'); vg.addColorStop(0.5, 'rgba(10,110,110,' + (0.45 * a) + ')'); vg.addColorStop(1, 'rgba(2,40,48,' + (0.92 * a) + ')');
+      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(200,255,240,' + (0.7 * a) + ')'; ctx.font = '900 ' + Math.round(20 + 8 * a) + 'px Arial Black, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('in the green room · ' + r.tube.toFixed(1) + ' s', W / 2, H * 0.2); ctx.textAlign = 'left';
+    }
+    if (G.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + G.flash * 0.6 + ')'; ctx.fillRect(0, 0, W, H); }
+    // what Space does now
+    var Pz = SURF.pitchAt(r), cls = SURF.closing(r), hint = r.drop > 0 ? 'Dropping in…' : r.airT > 0 ? '' : r.floatT > 0 ? 'Floating… steer DOWN to land' :
+      G.tech.floater && r.y > 0.74 && !r.inTube && (cls || r.d < 0.42) ? 'Space: FLOATER' : cls ? 'Closing out! Climb high' :
+      Pz && r.d > 0.16 && r.d <= 0.72 ? 'Space: STALL — let the barrel come' : G.tech.air && SURF.airReady(r) && r.d > r.lip + 0.04 ? '↑ straight up: AIR!' : r.y > 0.78 && r.spd > 0.95 ? 'Space: SNAP' : r.d > 0.72 && r.y > 0.3 && r.spd > 0.85 ? 'Space: CUTBACK' : r.y > 0.18 && r.y < 0.82 ? 'Space: pump' : '';
+    ctx.fillStyle = 'rgba(255,248,236,.9)'; ctx.font = '700 14px Trebuchet MS, sans-serif'; ctx.fillText(hint, sx + 40, sy - 30);
+    // speed meter
+    ctx.fillStyle = 'rgba(4,34,40,.6)'; ctx.fillRect(W - 30, H * 0.3, 14, H * 0.4); var sp = C((r.spd - 0.3) / 1.3, 0, 1);
+    ctx.fillStyle = r.spd >= 1.22 ? '#ffd34d' : '#bfe3e2'; ctx.fillRect(W - 30, H * 0.3 + H * 0.4 * (1 - sp), 14, H * 0.4 * sp);
+    if (G.tech.air) { var ay = H * 0.3 + H * 0.4 * (1 - (1.22 - 0.3) / 1.3); ctx.fillStyle = '#ffd34d'; ctx.fillRect(W - 36, ay, 26, 2); }
+    if (r.combo >= 2 && r.t - r.lastMan <= 2.4) { ctx.fillStyle = '#ffb38a'; ctx.font = '900 16px Arial Black, sans-serif'; ctx.fillText('combo ×' + r.combo, W - 130, H * 0.3 - 24); }
+    ctx.fillStyle = '#fff8ec'; ctx.font = '700 11px Trebuchet MS, sans-serif'; ctx.fillText('speed', W - 44, H * 0.3 - 6);
+  }
+  function drawPops() {
+    G.pops.forEach(function (p, i) {
+      var a = 1 - p.t / 1.4, s = (24 + 14 * p.big) * (motionOn() ? 1 + 0.3 * Math.max(0, 0.2 - p.t) * 5 : 1);
+      ctx.fillStyle = p.col; ctx.globalAlpha = a; ctx.font = '900 ' + Math.round(s) + 'px Arial Black, sans-serif'; ctx.textAlign = 'center';
+      ctx.strokeStyle = 'rgba(4,34,40,.8)'; ctx.lineWidth = 5; var y = H * 0.32 - p.t * 40 - i * 4;
+      ctx.strokeText(p.text, W * 0.55, y); ctx.fillText(p.text, W * 0.55, y);
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+    });
+    if (G.lastJ && G.lastJ.t > 0 && G.phase === 'wait') {   // the judges' panel after a wave
+      var j = G.lastJ.j, x0 = W / 2 - 150, y0 = H * 0.16;
+      ctx.globalAlpha = C(G.lastJ.t, 0, 1); ctx.fillStyle = 'rgba(4,34,40,.88)'; ctx.fillRect(x0, y0, 300, 74);
+      ctx.fillStyle = '#ffd34d'; ctx.font = '900 26px Arial Black, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(j.score.toFixed(2), W / 2, y0 + 30);
+      ctx.font = '800 14px monospace';
+      j.judges.forEach(function (v, i) { ctx.fillStyle = i === j.lo || i === j.hi ? 'rgba(255,248,236,.35)' : '#fff8ec'; ctx.fillText(v.toFixed(1), x0 + 30 + i * 60, y0 + 60); });
+      ctx.textAlign = 'left'; ctx.globalAlpha = 1;
+    }
+  }
+  function render(t) {
+    var d = Math.min(2, devicePixelRatio || 1); ctx.setTransform(d, 0, 0, d, 0, 0);
+    if (!G || scene === 'title' || scene === 'missions' || scene === 'how' || scene === 'settings' || scene === 'results') { drawTitle(motionOn() ? t : 0); return; }
+    if (G.phase === 'ride' && G.ride) drawRide(t); else drawLineup(t);
+    drawPops();
+  }
+  var gullT = 6;
+  function frame(now) {
+    var rdt = Math.min(0.05, (now - last) / 1000); last = now; T += rdt;
+    step(rdt); render(T);
+    if (oceanG && AC) oceanG.gain.value = S.mute ? 0 : 0.09 + 0.06 * Math.sin(T * 0.7);
+    if (scene === 'title') { gullT -= rdt; if (gullT < 0) { gullT = 7 + Math.random() * 8; SFX.gull(); } }
+    requestAnimationFrame(frame);
+  }
+
+  // ══ Page hooks: state() and the core self-test ══════════════════════════════
+  var HOOK = {
+    state: function () {
+      var r = G && G.ride;
+      return { screen: scene, mode: G ? G.mode : null, mission: G ? G.n : 0, phase: G ? G.phase : null, t: G ? +G.t.toFixed(2) : 0, heat: G ? G.heat : 0,
+        scores: G ? G.scores.slice() : [], total: G ? SURF.bestTwo(G.scores) : 0, target: G ? G.M.target : null, deaths: G ? G.deaths : 0,
+        score: G ? SURF.bestTwo(G.scores) : 0, catchWindow: catchWindow(), cleared: Object.assign({}, S.cleared),
+        barrels: S.barrels, ride: r ? { y: +r.y.toFixed(2), d: +r.d.toFixed(2), spd: +r.spd.toFixed(2), tube: r.inTube, made: r.made, t: +r.t.toFixed(1),
+          floatT: +r.floatT.toFixed(2), airT: +r.airT.toFixed(2), combo: r.combo, maxCombo: r.maxCombo, man: Object.assign({}, r.man), deep: r.deepMade, close: r.close ? r.close.t : null, airReady: SURF.airReady(r) } : null,
+        stars: Object.assign({}, S.stars), starTotal: starTotal(), rank: SURF.rank(starTotal()), tech: G ? Object.assign({}, G.tech) : SURF.techFor(reached()), moves: G ? Object.assign({}, G.stat) : null,
+        heat: G && G.H.on ? { order: G.H.order.slice(), interf: G.H.interf, you: myTotal(), opp: oppTotal(), rivals: G.H.rivals.map(function (x) { return { id: x.id, name: RIVALS[x.who], style: x.style, total: SURF.bestTwo(x.scores), scores: x.scores.slice(), read: x.read }; }), habit: SURF.habit(G.H) } : null,
+        result: G && G.res ? Object.assign({}, G.res, { tech: Object.assign({}, G.res.tech) }) : null, drill: G && G.drill ? { kind: G.drill, tries: G.dTry, ok: G.dOk } : null, drills: Object.assign({}, S.drills) };
+    },
+    core: function () { return SURF.selfTest(); },
+  };
+  window['__' + GAME_ID] = HOOK;
+
+  // ══ Boot ═══════════════════════════════════════════════════════════════════
+  fit();
+  buildTitle(); greet();
+  setScene('title');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
