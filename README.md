@@ -16,6 +16,13 @@
   <img src="assets/screenshot-play.png" alt="Bells Break — gameplay" width="820">
 </p>
 
+## More screenshots
+
+<table>
+<tr><td width="50%"><img src="assets/screenshot-heats.png" alt="The heats"><br><sub>The heats</sub></td><td width="50%"><img src="assets/screenshot-results.png" alt="The scoreboard after a heat"><br><sub>The scoreboard after a heat</sub></td></tr>
+<tr><td width="50%"><img src="assets/screenshot-pause.png" alt="Sitting on the board"><br><sub>Sitting on the board</sub></td></tr>
+</table>
+
 ## Controls
 
 | Keys | Action |
